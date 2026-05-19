@@ -1,0 +1,7 @@
+nodeLinker: node-modules
+
+enableGlobalCache: false
+
+npmRegistryServer: "https://registry.npmjs.org"
+
+yarnPath: .yarn/releases/yarn-4.9.2.cjs
