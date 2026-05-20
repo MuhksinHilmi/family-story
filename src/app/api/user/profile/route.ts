@@ -39,6 +39,13 @@ export async function PUT(request: NextRequest) {
       [full_name, email, phone, gender, birth_date, userId]
     );
 
+    await pool.query(
+      `UPDATE family_nodes SET full_name = COALESCE($1, full_name), gender = COALESCE($2, gender), 
+                            birth_date = COALESCE($3, birth_date)
+       WHERE user_id = $4`,
+      [full_name, gender, birth_date, userId]
+    );
+
     return NextResponse.json({
       message: 'Profil berhasil diperbarui',
       user: result.rows[0],

@@ -6,9 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/context/auth-context';
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [profile, setProfile] = useState({
     full_name: '',
     email: '',
@@ -16,20 +18,19 @@ export default function SettingsPage() {
     gender: 'male',
     birth_date: '',
   });
+  const [family, setFamily] = useState({
+    name: '',
+    description: '',
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/auth/login');
-        return;
-      }
-      const response = await fetch('/api/user/profile', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
+      if (!user?.id) return;
+
+      const res = await fetch(`/api/user/profile`);
+      if (res.ok) {
+        const data = await res.json();
         setProfile({
           full_name: data.user.full_name || '',
           email: data.user.email || '',
@@ -38,27 +39,57 @@ export default function SettingsPage() {
           birth_date: data.user.birth_date || '',
         });
       }
-    };
-    fetchProfile();
-  }, []);
 
-  const handleSave = async () => {
+      const memberRes = await fetch(`/api/tree/me?user_id=${user.id}`);
+      if (memberRes.ok) {
+        const memberData = await memberRes.json();
+        if (memberData.family_id) {
+          const familyRes = await fetch(`/api/family/${memberData.family_id}`);
+          if (familyRes.ok) {
+            const familyData = await familyRes.json();
+            setFamily({
+              name: familyData.name || '',
+              description: familyData.description || '',
+            });
+          }
+        }
+      }
+    };
+
+    fetchProfile();
+  }, [user?.id]);
+
+  const handleSaveProfile = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/user/profile', {
+      const res = await fetch('/api/user/profile', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profile),
       });
-      if (response.ok) {
-        console.log('Profile saved');
+      if (res.ok) {
+        alert('Profil tersimpan');
       }
     } catch (error) {
-      console.error('Failed to save:', error);
+      alert('Gagal menyimpan');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveFamily = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/family', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(family),
+      });
+      if (res.ok) {
+        alert('Keluarga tersimpan');
+      }
+    } catch (error) {
+      alert('Gagal menyimpan');
     } finally {
       setIsLoading(false);
     }
@@ -87,6 +118,7 @@ export default function SettingsPage() {
               value={profile.email}
               onChange={(e) => setProfile({ ...profile, email: e.target.value })}
               className="mt-1"
+              disabled
             />
           </div>
           <div>
@@ -117,7 +149,7 @@ export default function SettingsPage() {
               className="mt-1"
             />
           </div>
-          <Button className="mt-4" onClick={handleSave} disabled={isLoading}>
+          <Button className="mt-4" onClick={handleSaveProfile} disabled={isLoading}>
             {isLoading ? 'Menyimpan...' : 'Simpan Perubahan'}
           </Button>
         </CardContent>
@@ -130,13 +162,23 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           <div>
             <Label>Nama Keluarga</Label>
-            <Input defaultValue="Keluarga Ahmad" className="mt-1" />
+            <Input
+              value={family.name}
+              onChange={(e) => setFamily({ ...family, name: e.target.value })}
+              className="mt-1"
+            />
           </div>
           <div>
             <Label>Deskripsi</Label>
-            <Input defaultValue="Keluarga besar di Jawa" className="mt-1" />
+            <Input
+              value={family.description}
+              onChange={(e) => setFamily({ ...family, description: e.target.value })}
+              className="mt-1"
+            />
           </div>
-          <Button className="mt-4">Simpan</Button>
+          <Button className="mt-4" onClick={handleSaveFamily} disabled={isLoading}>
+            {isLoading ? 'Menyimpan...' : 'Simpan'}
+          </Button>
         </CardContent>
       </Card>
     </div>

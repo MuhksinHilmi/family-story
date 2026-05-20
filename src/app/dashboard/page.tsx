@@ -3,18 +3,58 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Users, TreePine, FileText, MessageCircle, UserPlus, Calendar, User, Shield } from 'lucide-react';
+import { Users, TreePine, FileText, MessageCircle, UserPlus, Calendar, Shield } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
+import { useEffect, useState } from 'react';
+
+interface FamilyStats {
+  memberCount: number;
+  nodeCount: number;
+  documentCount: number;
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const memberCount = 0;
-  const documentCount = 0;
-  const nodeCount = 0;
+  const [stats, setStats] = useState<FamilyStats>({
+    memberCount: 0,
+    nodeCount: 0,
+    documentCount: 0,
+  });
+  const [familyId, setFamilyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const memberRes = await fetch(`/api/tree/me?user_id=${user.id}`);
+        const memberData = await memberRes.json();
+        
+        const fid = memberData.family_id || memberData.node?.family_id;
+        if (!fid) return;
+        
+        setFamilyId(String(fid));
+        
+        const treeRes = await fetch(`/api/tree?family_id=${fid}`);
+        const treeData = await treeRes.json();
+        
+        if (treeData.nodes) {
+          setStats({
+            memberCount: treeData.nodes.length,
+            nodeCount: treeData.nodes.length,
+            documentCount: 0,
+          });
+        }
+      } catch (error) {
+        console.error('Load stats error:', error);
+      }
+    };
+    
+    loadStats();
+  }, [user?.id]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
@@ -26,7 +66,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Quick Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-0 hover:shadow-md transition-shadow">
           <CardContent className="p-6">
@@ -36,7 +75,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Total Anggota</p>
-                <p className="text-2xl font-bold text-gray-900">{memberCount}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.memberCount}</p>
               </div>
             </div>
           </CardContent>
@@ -50,7 +89,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Node Pohon</p>
-                <p className="text-2xl font-bold text-gray-900">{nodeCount}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.nodeCount}</p>
               </div>
             </div>
           </CardContent>
@@ -64,7 +103,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Dokumen</p>
-                <p className="text-2xl font-bold text-gray-900">{documentCount}</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.documentCount}</p>
               </div>
             </div>
           </CardContent>
@@ -85,7 +124,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Family Overview */}
       <Card className="border-0 shadow-md">
         <CardHeader>
           <div className="flex items-start justify-between">
@@ -99,15 +137,15 @@ export default function DashboardPage() {
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-primary">{memberCount}</div>
+              <div className="text-2xl font-bold text-primary">{stats.memberCount}</div>
               <div className="text-sm text-gray-600">Anggota Keluarga</div>
             </div>
             <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-primary">{nodeCount}</div>
+              <div className="text-2xl font-bold text-primary">{stats.nodeCount}</div>
               <div className="text-sm text-gray-600">Node Pohon</div>
             </div>
             <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-primary">{documentCount}</div>
+              <div className="text-2xl font-bold text-primary">{stats.documentCount}</div>
               <div className="text-sm text-gray-600">Dokumen</div>
             </div>
             <div className="text-center p-4 bg-gray-50 rounded-lg">
@@ -118,7 +156,6 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Quick Actions */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Aksi Cepat</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -163,50 +200,6 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
-
-      {/* Recent Activity */}
-      <Card className="border-0 shadow-md">
-        <CardHeader>
-          <CardTitle>Aktivitas Terbaru</CardTitle>
-          <CardDescription>Kabar terbaru dari keluarga Anda</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-              <div className="p-2 bg-primary/10 rounded-full">
-                <User className="h-4 w-4 text-primary" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">Ibu Siti bergabung</p>
-                <p className="text-sm text-gray-600">Anggota keluarga baru telah ditambahkan</p>
-              </div>
-              <span className="text-xs text-gray-500">2 hari lalu</span>
-            </div>
-            
-            <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-              <div className="p-2 bg-green-100 rounded-full">
-                <FileText className="h-4 w-4 text-green-600" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">Kartu Keluarga diupload</p>
-                <p className="text-sm text-gray-600">Dokumen telah berhasil disimpan</p>
-              </div>
-              <span className="text-xs text-gray-500">3 hari lalu</span>
-            </div>
-            
-            <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-              <div className="p-2 bg-purple-100 rounded-full">
-                <MessageCircle className="h-4 w-4 text-purple-600" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">Pesan baru di grup keluarga</p>
-                <p className="text-sm text-gray-600">Anak Pertama mengirim pesan</p>
-              </div>
-              <span className="text-xs text-gray-500">5 hari lalu</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

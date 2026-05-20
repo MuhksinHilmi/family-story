@@ -24,12 +24,12 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token && !pathname?.startsWith('/auth') && pathname !== '/') {
+    if (!token && !pathname?.startsWith('/auth') && !pathname?.startsWith('/invitations') && pathname !== '/') {
       router.push('/auth/login');
     }
   }, [pathname, router]);
 
-  const isAuthPage = pathname?.startsWith('/auth') || pathname === '/';
+  const isAuthPage = pathname?.startsWith('/auth') || pathname?.startsWith('/invitations') || pathname === '/';
 
   if (isAuthPage) {
     return children;

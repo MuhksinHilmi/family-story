@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await pool.query(
-      'SELECT id, full_name, gender, birth_date FROM users WHERE email = $1',
+      'SELECT id, full_name, gender, birth_date, is_email_verified FROM users WHERE email = $1',
       [email]
     );
 
@@ -24,6 +24,10 @@ export async function POST(request: NextRequest) {
     }
 
     const user = result.rows[0];
+
+    if (!user.is_email_verified) {
+      return NextResponse.json({ error: 'Email belum terverifikasi. Silakan verifikasi email terlebih dahulu.' }, { status: 403 });
+    }
     const otp = generateOTP();
 
     await pool.query(

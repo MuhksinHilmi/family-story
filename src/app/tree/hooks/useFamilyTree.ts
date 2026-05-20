@@ -163,19 +163,21 @@ export function useFamilyTree(): UseFamilyTreeReturn {
           setNodes(treeData.nodes);
           setEdges(treeData.edges);
         }
-      } else {
-        const userFamilyId = data.family_id || familyId;
-        await addNode({
-          full_name: fullName,
-          gender,
-          birth_date: birthDate,
-          user_id: userId,
-        }, { x: 400, y: 100 }, userFamilyId);
+      } else if (data.family_id) {
+        const fid = String(data.family_id);
+        const treeResponse = await fetch(`/api/tree?family_id=${fid}`);
+        const treeData = await treeResponse.json();
+        
+        if (treeData.nodes && treeData.edges) {
+          setFamilyId(fid);
+          setNodes(treeData.nodes);
+          setEdges(treeData.edges);
+        }
       }
     } catch (error) {
       console.error('Load user node error:', error);
     }
-  }, [familyId, addNode]);
+  }, []);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((nds) => applyNodeChanges(changes, nds) as Node<FamilyNodeData>[]);

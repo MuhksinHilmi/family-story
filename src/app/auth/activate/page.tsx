@@ -29,7 +29,15 @@ export default function ActivatePage() {
         const data = await response.json();
         if (response.ok) {
           setStatus('success');
-          setMessage('Akun berhasil diaktivasi!');
+          setMessage(data.message);
+          // Auto-login if token returned
+          if (data.token && data.user) {
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            setTimeout(() => router.push('/tree'), 1500);
+          } else {
+            setTimeout(() => router.push('/auth/login'), 1500);
+          }
         } else {
           setStatus('error');
           setMessage(data.error || 'Gagal mengaktifkan akun');
@@ -40,7 +48,7 @@ export default function ActivatePage() {
       }
     };
     activate();
-  }, []);
+  }, [router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -53,9 +61,7 @@ export default function ActivatePage() {
           {status === 'success' && (
             <div>
               <p className="text-green-600">{message}</p>
-              <Button className="w-full mt-4" onClick={() => router.push('/auth/login')}>
-                Ke Login
-              </Button>
+              <p className="text-sm text-gray-500 mt-2">Anda akan diarahkan ke halaman pohon keluarga...</p>
             </div>
           )}
           {status === 'error' && (

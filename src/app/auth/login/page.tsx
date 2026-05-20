@@ -47,24 +47,22 @@ export default function LoginPage() {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (otp.length !== 6) return;
+  const handleVerifyOtpComplete = async (value: string) => {
+    if (value.length !== 6) return;
     setIsLoading(true);
     setError('');
     try {
       const response = await fetch('/api/auth/login', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp }),
+        body: JSON.stringify({ email, otp: value }),
       });
+      const data = await response.json();
       if (response.ok) {
-        const data = await response.json();
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
-        router.push('/dashboard');
+        window.location.href = '/dashboard';
       } else {
-        const data = await response.json();
         setError(data.error || 'OTP salah');
       }
     } catch (error) {
@@ -72,6 +70,12 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.length !== 6) return;
+    await handleVerifyOtpComplete(otp);
   };
 
   const handleResendOtp = async () => {
@@ -140,10 +144,7 @@ export default function LoginPage() {
             <CardContent>
               <form onSubmit={handleVerifyOtp} className="space-y-4">
                 {error && <p className="text-red-500 text-sm">{error}</p>}
-                <OtpInput value={otp} onChange={setOtp} disabled={isLoading} />
-                <Button type="submit" className="w-full" disabled={isLoading || otp.length !== 6}>
-                  {isLoading ? 'Memverifikasi...' : 'Verifikasi'}
-                </Button>
+                <OtpInput value={otp} onChange={setOtp} onComplete={handleVerifyOtpComplete} disabled={isLoading} />
                 <div className="text-center">
                   <button
                     type="button"

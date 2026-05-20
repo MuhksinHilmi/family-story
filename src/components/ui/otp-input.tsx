@@ -7,11 +7,12 @@ interface OtpInputProps {
   length?: number;
   value: string;
   onChange: (value: string) => void;
+  onComplete?: (value: string) => void;
   disabled?: boolean;
 }
 
 const OtpInput = React.forwardRef<HTMLDivElement, OtpInputProps>(
-  ({ length = 6, value, onChange, disabled = false }, ref) => {
+  ({ length = 6, value, onChange, onComplete, disabled = false }, ref) => {
     const inputRefs = React.useRef<(HTMLInputElement | null)[]>([]);
 
     const setInputsRef = (el: HTMLInputElement | null, index: number) => {
@@ -29,6 +30,10 @@ const OtpInput = React.forwardRef<HTMLDivElement, OtpInputProps>(
       if (newValue && index < length - 1) {
         inputRefs.current[index + 1]?.focus();
       }
+
+      if (newString.length === length && onComplete) {
+        onComplete(newString);
+      }
     };
 
     const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -39,8 +44,11 @@ const OtpInput = React.forwardRef<HTMLDivElement, OtpInputProps>(
 
     const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
       e.preventDefault();
-      const paste = e.clipboardData.getData('text').slice(0, length);
+      const paste = e.clipboardData.getData('text').replace(/\s/g, '').slice(0, length);
       onChange(paste);
+      if (paste.length === length && onComplete) {
+        onComplete(paste);
+      }
     };
 
     return (

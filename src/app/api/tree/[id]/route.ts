@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
 export async function DELETE(request: NextRequest) {
+  const client = await pool.connect();
   try {
     const id = request.nextUrl.pathname.split('/').pop() || '';
 
@@ -12,12 +13,15 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const result = await pool.query(
-      `SELECT invitation_status, user_id FROM family_nodes WHERE id = $1`,
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `SELECT invitation_status, user_id, family_id, invitation_email FROM family_nodes WHERE id = $1`,
       [parseInt(id, 10)]
     );
 
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       return NextResponse.json(
         { error: 'Node tidak ditemukan' },
         { status: 404 }
@@ -26,18 +30,53 @@ export async function DELETE(request: NextRequest) {
 
     const node = result.rows[0];
 
-    await pool.query(
+    // Delete related invitations by email
+    if (node.invitation_email) {
+      await client.query(
+        'DELETE FROM invitations WHERE email = $1',
+        [node.invitation_email]
+      );
+    }
+
+    // Delete family_members if user_id exists
+    if (node.user_id) {
+      await client.query(
+        'DELETE FROM family_members WHERE user_id = $1 AND family_id = $2',
+        [node.user_id, node.family_id]
+      );
+
+      // Delete user account
+      await client.query(
+        'DELETE FROM users WHERE id = $1',
+        [node.user_id]
+      );
+    }
+
+    // Delete spouse relations involving this node
+    await client.query(
+      `DELETE FROM spouse_relations 
+       WHERE (node_a = $1 OR node_b = $1) AND family_id = $2`,
+      [parseInt(id, 10), node.family_id]
+    );
+
+    // Delete the node
+    await client.query(
       'DELETE FROM family_nodes WHERE id = $1',
       [parseInt(id, 10)]
     );
 
+    await client.query('COMMIT');
+
     return NextResponse.json({ message: 'Node dihapus' }, { status: 200 });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Delete node error:', error);
     return NextResponse.json(
       { error: 'Terjadi kesalahan' },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 }
 

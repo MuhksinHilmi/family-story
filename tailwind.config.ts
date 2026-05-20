@@ -22,6 +22,10 @@ const config: Config = {
           900: '#0c4a6e',
         },
       },
+      fontFamily: {
+        serif: ['Playfair Display', 'Georgia', 'serif'],
+        sans: ['DM Sans', 'Inter', 'sans-serif'],
+      },
     },
   },
   plugins: [],
