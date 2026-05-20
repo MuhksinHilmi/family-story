@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { OtpInput } from '@/components/ui/otp-input';
+import { rootStyles } from '@/components/ui/design-system';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -103,11 +104,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <Card className="w-full max-w-md">
+    <>
+      <style>{rootStyles}</style>
+      <div className="min-h-screen flex items-center justify-center">
+      <Card className="w-full max-w-md lp-card">
         {step === 'email' ? (
           <>
-            <CardHeader>
+            <CardHeader className="card-header">
               <CardTitle>Masuk</CardTitle>
               <CardDescription>Masukkan email untuk menerima kode OTP</CardDescription>
             </CardHeader>
@@ -137,7 +140,7 @@ export default function LoginPage() {
           </>
         ) : (
           <>
-            <CardHeader>
+            <CardHeader className="card-header">
               <CardTitle>Masukkan Kode OTP</CardTitle>
               <CardDescription>Kode OTP telah dikirim ke {email}</CardDescription>
             </CardHeader>
@@ -170,5 +173,6 @@ export default function LoginPage() {
         )}
       </Card>
     </div>
+    </>
   );
 }
