@@ -41,7 +41,7 @@ export interface FamilyNodeData extends Record<string, unknown> {
   death_date?: string;
   photo_url?: string;
   is_alive: boolean;
-  nasab_line?: 'father' | 'mother';
+  nasab_line?: string;
   birth_order?: number;
   father_id?: string;
   mother_id?: string;

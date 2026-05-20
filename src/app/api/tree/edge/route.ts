@@ -15,7 +15,7 @@ export async function DELETE(request: NextRequest) {
 
     if (type === 'spouse') {
       await pool.query(
-        'DELETE FROM spouse_relations WHERE node_a = $1 AND node_b = $2',
+        'DELETE FROM spouse_relations WHERE (node_a = $1 AND node_b = $2) OR (node_a = $2 AND node_b = $1)',
         [parseInt(node_a), parseInt(node_b)]
       );
       return NextResponse.json({ message: 'Hubungan suami/istri dihapus' }, { status: 200 });

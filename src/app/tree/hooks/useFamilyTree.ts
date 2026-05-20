@@ -35,7 +35,7 @@ interface UseFamilyTreeReturn {
   addChild: (parentId: string, data: NewNodeData) => void;
   connectChild: (parentId: string, childId: string) => void;
   deleteNode: (id: string) => void;
-  deleteEdge: (id: string) => void;
+  deleteEdge: (nodeA: string, nodeB: string, type: 'spouse' | 'child') => void;
   reinviteNode: (id: string) => void;
   savePosition: (nodeId: string, position: { x: number; y: number }) => void;
   loadTree: (familyId: string) => Promise<void>;
@@ -55,6 +55,16 @@ export function useFamilyTree(): UseFamilyTreeReturn {
   const openModal = useCallback(() => setIsModalOpen(true), []);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
 
+  const normalizeEdges = (edges: Edge[]) => {
+    const seen = new Set<string>();
+    return edges.filter((e) => {
+      const key = `${e.source}-${e.target}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   const loadTree = useCallback(async (fid: string) => {
     setIsLoading(true);
     try {
@@ -64,7 +74,7 @@ export function useFamilyTree(): UseFamilyTreeReturn {
       if (data.nodes && data.edges) {
         setFamilyId(fid);
         setNodes(data.nodes);
-        setEdges(data.edges);
+        setEdges(normalizeEdges(data.edges));
       }
     } catch (error) {
       console.error('Load tree error:', error);
@@ -208,6 +218,7 @@ export function useFamilyTree(): UseFamilyTreeReturn {
   }, []);
 
   const connectSpouse = useCallback(async (nodeAId: string, nodeBId: string) => {
+    if (!familyId) return;
     try {
       const response = await fetch(`/api/tree/${nodeAId}/connect`, {
         method: 'POST',
@@ -218,13 +229,13 @@ export function useFamilyTree(): UseFamilyTreeReturn {
         const error = await response.json();
         throw new Error(error.error || 'Failed to connect spouse');
       }
-      if (familyId) {
-        const treeResponse = await fetch(`/api/tree?family_id=${familyId}`);
-        const data = await treeResponse.json();
-        if (data.nodes && data.edges) {
-          setNodes(data.nodes);
-          setEdges(data.edges);
-        }
+      console.log('[connectSpouse] success, refetching tree...');
+      const treeResponse = await fetch(`/api/tree?family_id=${familyId}`);
+      const data = await treeResponse.json();
+      console.log('[connectSpouse] fetched nodes:', data.nodes?.length, 'first node spouse_ids:', data.nodes?.[0]?.spouse_ids);
+      if (data.nodes && data.edges) {
+        setNodes(data.nodes);
+        setEdges(data.edges);
       }
     } catch (error) {
       console.error('Connect spouse error:', error);
@@ -244,23 +255,63 @@ export function useFamilyTree(): UseFamilyTreeReturn {
   }, [nodes, addNode]);
 
   const connectChild = useCallback(async (parentId: string, childId: string) => {
+    if (!familyId) return;
     try {
+      const body = { target_id: childId, type: 'child', family_id: familyId };
+      console.log('[connectChild] POST body:', { parentId, childId, body });
+
       const response = await fetch(`/api/tree/${parentId}/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_id: childId, type: 'child', family_id: familyId })
+        body: JSON.stringify(body)
       });
+
+      const respJson = await response.json().catch(() => null);
+      console.log('[connectChild] POST response status, json:', response.status, respJson);
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to connect child');
+        throw new Error(respJson?.error || 'Failed to connect child');
       }
-      if (familyId) {
-        const treeResponse = await fetch(`/api/tree?family_id=${familyId}`);
-        const data = await treeResponse.json();
-        if (data.nodes && data.edges) {
-          setNodes(data.nodes);
-          setEdges(data.edges);
-        }
+
+      console.log('[connectChild] server ok, parentId, childId:', parentId, childId);
+
+      // Optimistically update local state so parent shows child immediately
+      setNodes((prev) => {
+        const parent = prev.find((n) => n.id === parentId);
+        const child = prev.find((n) => n.id === childId);
+        const parentGender = parent?.data.gender;
+
+        console.log('[connectChild] parent found, gender:', parentGender);
+
+        return prev.map((n) => {
+          if (n.id === parentId) {
+            const existing = Array.isArray(n.data.children_ids) ? n.data.children_ids : [];
+            const dedup = existing.includes(childId) ? existing : [...existing, childId];
+            return {
+              ...n,
+              data: { ...n.data, children_ids: dedup }
+            };
+          }
+
+          if (n.id === childId) {
+            const updatedChildData = { ...n.data } as any;
+            if (parentGender === 'male') updatedChildData.father_id = parentId;
+            if (parentGender === 'female') updatedChildData.mother_id = parentId;
+            return { ...n, data: updatedChildData } as Node<FamilyNodeData>;
+          }
+
+          return n;
+        });
+      });
+
+      // refetch authoritative tree to ensure consistency
+      const treeResponse = await fetch(`/api/tree?family_id=${familyId}`);
+      const data = await treeResponse.json();
+      console.log('[connectChild] fetched tree full response:', data);
+      console.log('[connectChild] fetched tree nodes sample:', data.nodes?.slice(0,5).map((n:any)=>({ id: n.id, children_ids: n.data?.children_ids })));
+      if (data.nodes && data.edges) {
+        setNodes(data.nodes);
+        setEdges(data.edges);
       }
     } catch (error) {
       console.error('Connect child error:', error);

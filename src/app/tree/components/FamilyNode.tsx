@@ -8,9 +8,10 @@ interface FamilyNodeProps {
   data: FamilyNodeData;
   selected: boolean;
   onInfoClick?: (nodeId: string) => void;
+  onStartConnection?: (nodeId: string) => void;
 }
 
-export const FamilyNode = memo(({ data, selected, onInfoClick }: FamilyNodeProps) => {
+export const FamilyNode = memo(({ data, selected, onInfoClick, onStartConnection }: FamilyNodeProps) => {
   const isDeceased = data.is_alive === false;
   const isPending = data.invitation_status === 'pending';
   const isSelected = selected;
@@ -46,7 +47,10 @@ export const FamilyNode = memo(({ data, selected, onInfoClick }: FamilyNodeProps
         </div>
 
         <div className="text-sm font-medium text-center truncate w-full px-1">
-          {data.full_name}
+          <div className="truncate">{data.full_name}</div>
+          {data.nasab_line && (
+            <div className="text-[10px] text-gray-500 truncate">{data.nasab_line}</div>
+          )}
         </div>
 
         {isPending && (

@@ -31,52 +31,73 @@ export async function GET(request: NextRequest) {
       [familyId]
     );
 
-    const childrenMap = new Map();
+    const childrenMap = new Map<string, string[]>();
     nodesResult.rows.forEach(node => {
       if (node.father_id) {
-        if (!childrenMap.has(node.father_id)) childrenMap.set(node.father_id, []);
-        childrenMap.get(node.father_id).push(node.id.toString());
+        const key = node.father_id.toString();
+        if (!childrenMap.has(key)) childrenMap.set(key, []);
+        childrenMap.get(key)!.push(node.id.toString());
       }
       if (node.mother_id) {
-        if (!childrenMap.has(node.mother_id)) childrenMap.set(node.mother_id, []);
-        childrenMap.get(node.mother_id).push(node.id.toString());
+        const key = node.mother_id.toString();
+        if (!childrenMap.has(key)) childrenMap.set(key, []);
+        childrenMap.get(key)!.push(node.id.toString());
       }
+    });
+
+    // Normalize and dedupe spouse relations so we don't return duplicates like [3,3]
+    const relationSet = new Set();
+    spouseRelationsResult.rows.forEach(relation => {
+      const a = Math.min(relation.node_a, relation.node_b);
+      const b = Math.max(relation.node_a, relation.node_b);
+      relationSet.add(`${a}-${b}`);
     });
 
     const spouseMap = new Map();
-    spouseRelationsResult.rows.forEach(relation => {
-      if (!spouseMap.has(relation.node_a)) spouseMap.set(relation.node_a, []);
-      if (!spouseMap.has(relation.node_b)) spouseMap.set(relation.node_b, []);
-      spouseMap.get(relation.node_a).push(relation.node_b);
-      spouseMap.get(relation.node_b).push(relation.node_a);
+    relationSet.forEach(key => {
+      const [aStr, bStr] = key.split('-');
+      const a = parseInt(aStr, 10);
+      const b = parseInt(bStr, 10);
+      if (!spouseMap.has(a)) spouseMap.set(a, new Set());
+      if (!spouseMap.has(b)) spouseMap.set(b, new Set());
+      spouseMap.get(a).add(b.toString());
+      spouseMap.get(b).add(a.toString());
     });
 
+// build id -> name map for nasab computation
+    const idToName = new Map<string, string>();
+    nodesResult.rows.forEach(n => idToName.set(n.id.toString(), n.full_name));
+
     const nodes = nodesResult.rows.map(node => ({
-      id: node.id.toString(),
-      type: 'custom',
-      position: { x: node.position_x || 0, y: node.position_y || 0 },
-      data: {
-        id: node.id.toString(),
-        family_id: node.family_id,
-        user_id: node.user_id,
-        full_name: node.full_name,
-        gender: node.gender,
-        birth_date: node.birth_date,
-        death_date: node.death_date,
-        photo_url: node.photo_url,
-        is_alive: node.is_alive,
-        nasab_line: node.nasab_line,
-        birth_order: node.birth_order,
-        father_id: node.father_id,
-        mother_id: node.mother_id,
-        spouse_ids: spouseMap.get(node.id) || [],
-        children_ids: childrenMap.get(node.id) || [],
-        invitation_email: node.invitation_email,
-        invitation_status: node.invitation_status,
-        created_at: node.created_at,
-        updated_at: node.updated_at,
-      }
-    }));
+       id: node.id.toString(),
+       type: 'custom',
+       position: { x: node.position_x || 0, y: node.position_y || 0 },
+       data: {
+         id: node.id.toString(),
+         family_id: node.family_id,
+         user_id: node.user_id,
+         full_name: node.full_name,
+         gender: node.gender,
+         birth_date: node.birth_date,
+         death_date: node.death_date,
+         photo_url: node.photo_url,
+         is_alive: node.is_alive,
+         nasab_line: node.nasab_line,
+         birth_order: node.birth_order,
+         father_id: node.father_id,
+         mother_id: node.mother_id,
+// compute nasab_line from father_id only (nasab is father lineage)
+          nasab_line: node.father_id ? `bin ${idToName.get(node.father_id.toString())}` : null,
+         spouse_ids: Array.from(spouseMap.get(node.id) || []),
+         children_ids: childrenMap.get(node.id.toString()) || [],
+         invitation_email: node.invitation_email,
+         invitation_status: node.invitation_status,
+         created_at: node.created_at,
+         updated_at: node.updated_at,
+       }
+     }));
+
+    console.log('[GET /api/tree] familyId:', familyId, 'nodes count:', nodes.length, 'sample spouse_ids:', nodes.slice(0, 3).map(n => ({ id: n.id, spouse_ids: n.data.spouse_ids })), 'childrenMap sample:', Array.from(childrenMap.entries()).slice(0,5));
 
     const edges: Edge[] = [];
     spouseRelationsResult.rows.forEach(relation => {
@@ -91,6 +112,7 @@ export async function GET(request: NextRequest) {
       });
     });
 
+    // Create edges for both father and mother if they exist
     nodesResult.rows.forEach(node => {
       if (node.father_id) {
         edges.push({
