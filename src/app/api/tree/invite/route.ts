@@ -33,7 +33,8 @@ export async function POST(request: NextRequest) {
         [family_id, email, token, null]
       );
 
-      await sendActivationLink(email, token);
+      // send invitation-specific link so user lands on invitation page first
+    await sendInvitationLink(email, token);
 
       return NextResponse.json({
         message: 'Undangan berhasil dikirim',

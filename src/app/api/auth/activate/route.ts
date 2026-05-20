@@ -9,56 +9,65 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token diperlukan' }, { status: 400 });
     }
 
-    const invResult = await pool.query(
-      `SELECT i.*, fn.id as node_id, fn.family_id, fn.full_name, fn.gender, fn.invitation_email
-       FROM invitations i
-       LEFT JOIN family_nodes fn ON fn.invitation_email = i.email AND fn.family_id = i.family_id
-       WHERE i.token = $1 AND i.status = 'pending'`,
-      [token]
-    );
-
-    if (invResult.rows.length > 0) {
-      const invitation = invResult.rows[0];
-      const nodeId = invitation.node_id;
-
-      if (nodeId) {
-        await pool.query(
-          "UPDATE family_nodes SET invitation_status = 'accepted' WHERE id = $1",
-          [nodeId]
-        );
-      }
-
-      await pool.query(
-        "UPDATE invitations SET status = 'accepted' WHERE id = $1",
-        [invitation.id]
-      );
-
-      return NextResponse.json({ message: 'Undangan berhasil diterima', nodeId });
-    }
-
     const userResult = await pool.query(
       'SELECT id, full_name, email, created_at FROM users WHERE activation_token = $1',
       [token]
     );
 
-    if (userResult.rows.length === 0) {
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0];
+      const createdAt = new Date(user.created_at);
+      const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
+
+      if (new Date() > expiresAt) {
+        return NextResponse.json({ error: 'Token telah kadaluarsa' }, { status: 400 });
+      }
+
+      await pool.query(
+        'UPDATE users SET is_email_verified = true, activation_token = NULL WHERE id = $1',
+        [user.id]
+      );
+
+      return NextResponse.json({ message: 'Akun berhasil diaktivasi' });
+    }
+
+    const invResult = await pool.query(
+      `SELECT i.id, i.family_id, i.email, i.token, i.status, i.expires_at, i.created_at,
+              n.id as node_id, n.full_name, n.gender
+       FROM invitations i
+       LEFT JOIN family_nodes n ON n.invitation_email = i.email AND n.family_id = i.family_id
+       WHERE i.token = $1`,
+      [token]
+    );
+
+    if (invResult.rows.length === 0) {
       return NextResponse.json({ error: 'Token tidak valid' }, { status: 404 });
     }
 
-    const user = userResult.rows[0];
-    const createdAt = new Date(user.created_at);
-    const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
+    const invitation = invResult.rows[0];
+    const isExpired = new Date(invitation.expires_at) < new Date();
 
-    if (new Date() > expiresAt) {
-      return NextResponse.json({ error: 'Token telah kadaluarsa' }, { status: 400 });
+    if (isExpired || invitation.status !== 'pending') {
+      return NextResponse.json({ error: 'Undangan tidak valid atau sudah kadaluarsa' }, { status: 400 });
     }
 
-    await pool.query(
-      'UPDATE users SET is_email_verified = true, activation_token = NULL WHERE id = $1',
-      [user.id]
-    );
-
-    return NextResponse.json({ message: 'Akun berhasil diaktivasi' });
+    return NextResponse.json({
+      message: 'Undangan ditemukan',
+      invitation: {
+        id: invitation.id,
+        family_id: invitation.family_id,
+        email: invitation.email,
+        token: invitation.token,
+        status: invitation.status,
+        expires_at: invitation.expires_at,
+        created_at: invitation.created_at,
+        node: invitation.node_id ? {
+          id: invitation.node_id,
+          full_name: invitation.full_name,
+          gender: invitation.gender
+        } : null
+      }
+    }, { status: 200 });
   } catch (error) {
     console.error('Activate error:', error);
     return NextResponse.json({ error: 'Terjadi kesalahan' }, { status: 500 });

@@ -68,3 +68,18 @@ export async function sendActivationLink(to: string, token: string): Promise<boo
   `;
   return sendEmail(to, 'Aktivasi Akun - Cerita Keluarga', html);
 }
+
+export async function sendInvitationLink(to: string, token: string): Promise<boolean> {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+      <h2>Anda diundang untuk bergabung</h2>
+      <p>Klik link berikut untuk melihat undangan dan bergabung ke pohon keluarga:</p>
+      <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/invitations/${token}" 
+         style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
+        Lihat Undangan
+      </a>
+      <p>Link ini berlaku selama 7 hari.</p>
+    </div>
+  `;
+  return sendEmail(to, 'Undangan - Cerita Keluarga', html);
+}

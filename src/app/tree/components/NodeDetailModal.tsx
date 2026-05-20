@@ -47,7 +47,9 @@ export function NodeDetailModal({
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
-  const node = nodeId ? nodes.find((n) => n.id === nodeId)?.data : null;
+  const node = nodeId
+    ? nodes.find((n) => String(n.id) === String(nodeId))?.data
+    : null;
 
   if (!node) return null;
 
@@ -55,15 +57,17 @@ export function NodeDetailModal({
   const isOwnNode = node.user_id === currentUserId;
   const canDelete = isOwnNode || isPending;
 
-  const getNodeName = (id?: string) => {
-    if (!id) return null;
-    const n = nodes.find((n) => n.id === id);
+  const getNodeName = (id?: string | number) => {
+    if (id === undefined || id === null) return null;
+    const idStr = String(id);
+    const n = nodes.find((n) => String(n.id) === idStr);
     return n?.data?.full_name || null;
   };
 
-  const getGender = (id?: string) => {
-    if (!id) return null;
-    const n = nodes.find((n) => n.id === id);
+  const getGender = (id?: string | number) => {
+    if (id === undefined || id === null) return null;
+    const idStr = String(id);
+    const n = nodes.find((n) => String(n.id) === idStr);
     return n?.data?.gender || null;
   };
 
@@ -71,11 +75,12 @@ export function NodeDetailModal({
     // prefer explicit children_ids returned by server
     if (node.children_ids && node.children_ids.length > 0) {
       return node.children_ids.map((id) => {
-        const childNode = nodes.find((n) => n.id === id)?.data || null;
+        const idStr = String(id);
+        const childNode = nodes.find((n) => n.id === idStr)?.data || null;
         return {
-          id,
-          name: childNode?.full_name || getNodeName(id) || "",
-          gender: childNode?.gender || getGender(id) || null,
+          id: idStr,
+          name: childNode?.full_name || getNodeName(idStr) || "",
+          gender: childNode?.gender || getGender(idStr) || null,
           father_id: childNode?.father_id || null,
           mother_id: childNode?.mother_id || null,
         };
@@ -86,7 +91,9 @@ export function NodeDetailModal({
     const inferred = nodes
       .filter((n) => n.id !== node.id)
       .filter(
-        (n) => n.data.father_id === node.id || n.data.mother_id === node.id,
+        (n) =>
+          String(n.data.father_id) === String(node.id) ||
+          String(n.data.mother_id) === String(node.id),
       )
       .map((n) => ({
         id: n.id,
@@ -117,8 +124,24 @@ export function NodeDetailModal({
   };
 
   const spouseName = node.spouse_ids.map((id) => getNodeName(id)).find(Boolean);
-  const fatherName = getNodeName(node.father_id);
-  const motherName = getNodeName(node.mother_id);
+  const fatherName =
+    getNodeName(node.father_id) ||
+    nodes.find(
+      (n) =>
+        Array.isArray(n.data.children_ids) &&
+        n.data.children_ids.map(String).includes(String(node.id)) &&
+        n.data.gender === "male",
+    )?.data?.full_name ||
+    null;
+  const motherName =
+    getNodeName(node.mother_id) ||
+    nodes.find(
+      (n) =>
+        Array.isArray(n.data.children_ids) &&
+        n.data.children_ids.map(String).includes(String(node.id)) &&
+        n.data.gender === "female",
+    )?.data?.full_name ||
+    null;
   const children = getChildrenSorted();
 
   const isWife = node.gender === "female" && spouseName;
@@ -129,7 +152,11 @@ export function NodeDetailModal({
 
   const siblings = node.father_id
     ? nodes
-        .filter((n) => n.id !== node.id && n.data.father_id === node.father_id)
+        .filter(
+          (n) =>
+            String(n.id) !== String(node.id) &&
+            String(n.data.father_id) === String(node.father_id),
+        )
         .map((n) => n.data.full_name)
     : [];
 
@@ -160,11 +187,13 @@ export function NodeDetailModal({
             <div>
               <h3 className="font-semibold text-lg">{node.full_name}</h3>
               {node.nasab_line && (
-                <div className="text-sm text-gray-500">{node.nasab_line}</div>
+                <h4 className="text-sm text-blue-500">{node.nasab_line}</h4>
               )}
               {fatherName && !node.nasab_line && (
                 <div className="text-sm text-gray-500">
-                  {node.gender === 'male' ? `bin ${fatherName}` : `binti ${fatherName}`}
+                  {node.gender === "male"
+                    ? `Bin ${fatherName}`
+                    : `Binti ${fatherName}`}
                 </div>
               )}
               <p className="text-sm text-gray-500">
@@ -186,6 +215,12 @@ export function NodeDetailModal({
                 {node.gender === "male" ? "Laki-laki" : "Perempuan"}
               </span>
             </div>
+            {hasMother && (
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-gray-500" />
+                <span className="text-sm">Ibu kandung: {motherName}</span>
+              </div>
+            )}
             {node.birth_date && (
               <div className="flex items-center gap-2">
                 <Cake className="h-4 w-4 text-gray-500" />
@@ -209,47 +244,35 @@ export function NodeDetailModal({
                 <span className="text-sm">Istri: {spouseName}</span>
               </div>
             )}
-            {hasFather && (
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-gray-500" />
-                <span className="text-sm">Ayah: {fatherName}</span>
-              </div>
-            )}
-            {hasMother && (
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-gray-500" />
-                <span className="text-sm">Ibu: {motherName}</span>
-              </div>
-            )}
           </div>
 
           {hasChildren && children.length > 0 && (
             <div className="space-y-1">
               {children.map((child, index) => {
-                // Only show nasab if child has father_id (nasab is father lineage only)
                 const childFatherName = child.father_id
                   ? getNodeName(child.father_id)
                   : null;
+                const childMotherName = child.mother_id
+                  ? getNodeName(child.mother_id)
+                  : null;
                 const nasab = childFatherName
-                  ? child.gender === 'male'
-                    ? `bin ${childFatherName}`
-                    : `binti ${childFatherName}`
+                  ? child.gender === "male"
+                    ? `Bin ${childFatherName}`
+                    : `Binti ${childFatherName}`
                   : null;
                 return (
-                  <div key={child.id} className="flex items-center gap-2 text-sm">
+                  <div
+                    key={child.id}
+                    className="flex items-center gap-2 text-sm"
+                  >
                     <Users className="h-4 w-4 text-gray-500" />
                     <span>
                       Anak {index + 1}: {child.name}
                       <span
-                        className={`${
-                          child.gender === 'male' ? 'text-blue-600' : 'text-pink-600'
-                        } inline-block ml-2`}
+                        className={`${child.gender === "male" ? "text-blue-800" : "text-pink-800"} inline-block ml-2`}
                       >
-                        {child.gender === 'male' ? '♂' : '♀'}
+                        {child.gender === "male" ? "♂" : "♀"}
                       </span>
-                      {nasab && (
-                        <span className="ml-2 text-gray-500 text-xs">{nasab}</span>
-                      )}
                     </span>
                   </div>
                 );
