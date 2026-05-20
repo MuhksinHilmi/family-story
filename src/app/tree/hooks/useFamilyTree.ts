@@ -175,16 +175,25 @@ export function useFamilyTree(): UseFamilyTreeReturn {
     setEdges((prev) => applyEdgeChanges(changes, prev));
   }, []);
 
-  const deleteEdge = useCallback(async (id: string) => {
+  const deleteEdge = useCallback(async (nodeA: string, nodeB: string, type: 'spouse' | 'child') => {
     try {
-      await fetch(`/api/tree/${id}/edge`, {
+      await fetch(`/api/tree/edge`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_a: nodeA, node_b: nodeB, type })
       });
-      setEdges(prev => prev.filter(e => e.id !== id));
+      if (familyId) {
+        const response = await fetch(`/api/tree?family_id=${familyId}`);
+        const data = await response.json();
+        if (data.nodes && data.edges) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
+        }
+      }
     } catch (error) {
       console.error('Delete edge error:', error);
     }
-  }, []);
+  }, [familyId, setNodes, setEdges]);
 
   const savePosition = useCallback(async (nodeId: string, position: { x: number; y: number }) => {
     try {
@@ -200,15 +209,27 @@ export function useFamilyTree(): UseFamilyTreeReturn {
 
   const connectSpouse = useCallback(async (nodeAId: string, nodeBId: string) => {
     try {
-      await fetch(`/api/tree/${nodeAId}/connect`, {
+      const response = await fetch(`/api/tree/${nodeAId}/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_id: nodeBId, type: 'spouse', family_id: familyId })
       });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to connect spouse');
+      }
+      if (familyId) {
+        const treeResponse = await fetch(`/api/tree?family_id=${familyId}`);
+        const data = await treeResponse.json();
+        if (data.nodes && data.edges) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
+        }
+      }
     } catch (error) {
       console.error('Connect spouse error:', error);
     }
-  }, [familyId]);
+  }, [familyId, setNodes, setEdges]);
 
   const addChild = useCallback(async (parentId: string, data: NewNodeData) => {
     const parent = nodes.find(n => n.id === parentId);
@@ -224,15 +245,27 @@ export function useFamilyTree(): UseFamilyTreeReturn {
 
   const connectChild = useCallback(async (parentId: string, childId: string) => {
     try {
-      await fetch(`/api/tree/${parentId}/connect`, {
+      const response = await fetch(`/api/tree/${parentId}/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_id: childId, type: 'child', family_id: familyId })
       });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to connect child');
+      }
+      if (familyId) {
+        const treeResponse = await fetch(`/api/tree?family_id=${familyId}`);
+        const data = await treeResponse.json();
+        if (data.nodes && data.edges) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
+        }
+      }
     } catch (error) {
       console.error('Connect child error:', error);
     }
-  }, [familyId]);
+  }, [familyId, setNodes, setEdges]);
 
   const deleteNode = useCallback(async (id: string) => {
     try {
@@ -252,12 +285,18 @@ export function useFamilyTree(): UseFamilyTreeReturn {
         alert(error.error || 'Gagal menghapus node');
         return;
       }
-      setNodes(prev => prev.filter(n => n.id !== id));
-      setEdges(prev => prev.filter(e => e.source !== id && e.target !== id));
+      if (familyId) {
+        const treeResponse = await fetch(`/api/tree?family_id=${familyId}`);
+        const treeData = await treeResponse.json();
+        if (treeData.nodes && treeData.edges) {
+          setNodes(treeData.nodes);
+          setEdges(treeData.edges);
+        }
+      }
     } catch (error) {
       console.error('Delete node error:', error);
     }
-  }, [nodes, user?.id]);
+  }, [nodes, user?.id, familyId, setNodes, setEdges]);
 
   const reinviteNode = useCallback(async (id: string) => {
     const node = nodes.find(n => n.id === id);
@@ -269,10 +308,18 @@ export function useFamilyTree(): UseFamilyTreeReturn {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: node.data.invitation_email, family_id: familyId })
       });
+      if (familyId) {
+        const response = await fetch(`/api/tree?family_id=${familyId}`);
+        const data = await response.json();
+        if (data.nodes && data.edges) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
+        }
+      }
     } catch (error) {
       console.error('Reinvite error:', error);
     }
-  }, [nodes, familyId]);
+  }, [nodes, familyId, setNodes, setEdges]);
 
   return {
     nodes,

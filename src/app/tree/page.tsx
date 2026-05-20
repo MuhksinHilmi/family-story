@@ -19,7 +19,6 @@ import {
   Plus,
   Link as LinkIcon,
   UserPlus,
-  Trash2,
   Scissors,
 } from "lucide-react";
 import { FamilyNode } from "./components/FamilyNode";
@@ -28,7 +27,7 @@ import { NodeDetailModal } from "./components/NodeDetailModal";
 import { useFamilyTree } from "./hooks/useFamilyTree";
 import { useAuth } from "@/context/auth-context";
 
-type Mode = "default" | "spouse" | "child" | "deleteNode" | "deleteEdge";
+type Mode = "default" | "spouse" | "child" | "deleteEdge";
 
 export default function TreePage() {
    const { user, isLoading: authLoading } = useAuth();
@@ -111,19 +110,21 @@ const {
           setFirstSelectedNodeId(null);
           setMode("default");
         }
-      } else if (mode === "deleteNode") {
-        deleteNode(node.id);
       } else {
         setFirstSelectedNodeId(null);
       }
     },
-    [mode, firstSelectedNodeId, connectSpouse, connectChild, deleteNode],
+    [mode, firstSelectedNodeId, connectSpouse, connectChild],
   );
 
   const onEdgeClick = useCallback(
     (_: React.MouseEvent, edge: Edge) => {
       if (mode === "deleteEdge") {
-        deleteEdge(edge.id);
+        const idParts = edge.id.split('-');
+        const type = idParts[0] === 'spouse' ? 'spouse' : 'child';
+        const nodeA = type === 'spouse' ? idParts[1] : idParts[2];
+        const nodeB = type === 'spouse' ? idParts[2] : idParts[3];
+        deleteEdge(nodeA, nodeB, type);
       }
     },
     [mode, deleteEdge],
@@ -253,16 +254,6 @@ const {
             </Button>
             <Button
               size="sm"
-              variant={mode === "deleteNode" ? "destructive" : "outline"}
-              onClick={() =>
-                setMode(mode === "deleteNode" ? "default" : "deleteNode")
-              }
-            >
-              <Trash2 className="h-4 w-4 mr-1" />
-              <span className="hidden xs:inline">Hapus Node</span>
-            </Button>
-            <Button
-              size="sm"
               variant={mode === "deleteEdge" ? "destructive" : "outline"}
               onClick={() =>
                 setMode(mode === "deleteEdge" ? "default" : "deleteEdge")
@@ -306,7 +297,10 @@ const {
         open={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
         node={detailNode}
+        nodes={nodes}
         onReinvite={reinviteNode}
+        onDelete={deleteNode}
+        currentUserId={user?.id}
       />
     </div>
   );
