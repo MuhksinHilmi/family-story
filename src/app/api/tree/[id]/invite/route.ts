@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import pool from '@/lib/db_helper';
 import { randomBytes } from 'crypto';
 
 export async function POST(request: NextRequest) {

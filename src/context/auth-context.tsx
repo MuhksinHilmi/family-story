@@ -16,6 +16,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function isTokenExpired(token: string): boolean {
   try {
+    // Case 1: Real JWT (header.payload.signature)
+    if (token.includes('.')) {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(atob(parts[1]));
+        if (payload.exp) {
+          return Date.now() >= payload.exp * 1000; // exp is in seconds
+        }
+      }
+    }
+
+    // Case 2: Old fake token format (token-123-123456789) - fallback during transition
     const parts = token.split('-');
     if (parts.length >= 3) {
       const timestamp = parseInt(parts[2], 10);
@@ -23,6 +35,7 @@ function isTokenExpired(token: string): boolean {
       return Date.now() - timestamp > TOKEN_AGE_MS;
     }
   } catch {
+    // Any parsing error → treat as expired (safer)
     return true;
   }
   return true;
@@ -37,8 +50,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
+
     if (storedToken && storedUser) {
-      if (isTokenExpired(storedToken)) {
+      const expired = isTokenExpired(storedToken);
+
+      if (expired) {
+        // Token expired or invalid → force logout
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       } else {

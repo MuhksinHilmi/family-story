@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import pool from '@/lib/db_helper';
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       id: invitation.id,
       family_id: invitation.family_id,
+      family_uuid: invitation.family_uuid, // ← Stable identifier for chat & future flows
       email: invitation.email,
       token: invitation.token,
       status: invitation.status,

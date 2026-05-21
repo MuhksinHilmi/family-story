@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import pool from '@/lib/db_helper';
+import { SignJWT } from 'jose';
 
 export async function POST(request: NextRequest) {
   const client = await pool.connect();
@@ -66,9 +67,20 @@ export async function POST(request: NextRequest) {
       // Mark invitation accepted
       await client.query(`UPDATE invitations SET status = 'accepted' WHERE token = $1`, [token]);
 
+      // Issue real JWT
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+      const jwtToken = await new SignJWT({ 
+        sub: userId.toString(),
+        email: invitation.email 
+      })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('7d')
+        .sign(secret);
+
       return NextResponse.json({ 
         message: 'Undangan diterima', 
-        token: `token-${userId}-${Date.now()}`,
+        token: jwtToken,
         user: { id: userId, email: invitation.email }
       }, { status: 200 });
     }

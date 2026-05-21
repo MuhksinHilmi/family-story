@@ -81,7 +81,12 @@ const acceptAsLoggedIn = async () => {
       const regRes = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, family_id: inv.family_id }),
+        body: JSON.stringify({
+          ...form,
+          family_id: inv.family_id,
+          // Send family_uuid when available (preferred for new flows)
+          family_uuid: inv.family_uuid || null,
+        }),
       });
       const regData = await regRes.json();
       if (!regRes.ok) {

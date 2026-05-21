@@ -104,11 +104,21 @@ export interface ChatMessage {
   id: string;
   room_id: string;
   sender_id: string;
-  content: string;
+  sender_name?: string;
+  sender_photo?: string;   // profile photo URL of sender (from snapshot)
+  content: string | Record<string, unknown>;
   type: 'text' | 'image' | 'document';
   file_url?: string;
   reply_to?: string;
   created_at: string;
+}
+
+export interface UserFamily {
+  user_id: string;
+  family_id: string;
+  role: 'admin' | 'member';
+  joined_at: string;
+  family?: Family;
 }
 
 export interface AuthState {

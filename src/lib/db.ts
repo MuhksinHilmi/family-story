@@ -1,11 +1,5 @@
-import { Pool } from 'pg';
+// DEPRECATED
+// Database connection has been moved to src/lib/db_helper/
+// Please update your imports to: import pool from '@/lib/db_helper';
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'family_story',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || undefined, // undefined for peer auth
-});
-
-export default pool;
+export { default } from './db_helper/db';

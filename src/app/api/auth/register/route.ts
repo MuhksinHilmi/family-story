@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import pool from '@/lib/db_helper';
 import { sendActivationLink } from '@/lib/email';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
   const client = await pool.connect();
   try {
     const body = await request.json();
-    const { full_name, email, phone, gender, birth_date, family_id } = body;
+    const { full_name, email, phone, gender, birth_date, family_id, family_uuid } = body;
 
     if (!full_name || !email) {
       return NextResponse.json(
@@ -30,21 +30,44 @@ export async function POST(request: NextRequest) {
     await client.query('BEGIN');
 
     const activationToken = randomBytes(32).toString('hex');
+    const userUuid = randomUUID();
+
     const userResult = await client.query(
-      `INSERT INTO users (full_name, email, phone, gender, birth_date, is_email_verified, is_phone_verified, activation_token, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, false, false, $6, NOW(), NOW())
-       RETURNING id, full_name, email, phone, gender, birth_date`,
-      [full_name, email, phone, gender, birth_date, activationToken]
+      `INSERT INTO users (uuid, full_name, email, phone, gender, birth_date, is_email_verified, is_phone_verified, activation_token, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, false, false, $7, NOW(), NOW())
+       RETURNING id, uuid, full_name, email, phone, gender, birth_date`,
+      [userUuid, full_name, email, phone, gender, birth_date, activationToken]
     );
 
     const user = userResult.rows[0];
 
     let targetFamilyId: number;
-    const isJoiningInvitation = !!family_id;
+    let targetFamilyUuid: string;
+    const isJoiningInvitation = !!(family_id || family_uuid);
 
-    if (family_id) {
+    if (family_uuid) {
+      // Preferred path: join via stable family_uuid (new flow)
       const familyCheck = await client.query(
-        'SELECT id FROM families WHERE id = $1',
+        'SELECT id, uuid FROM families WHERE uuid = $1',
+        [family_uuid]
+      );
+      if (familyCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { error: 'Family tidak ditemukan' },
+          { status: 404 }
+        );
+      }
+      targetFamilyId = familyCheck.rows[0].id;
+      targetFamilyUuid = familyCheck.rows[0].uuid;
+      await client.query(
+        'UPDATE users SET is_email_verified = true WHERE id = $1',
+        [user.id]
+      );
+    } else if (family_id) {
+      // Legacy path (still supported during transition)
+      const familyCheck = await client.query(
+        'SELECT id, uuid FROM families WHERE id = $1',
         [family_id]
       );
       if (familyCheck.rows.length === 0) {
@@ -55,17 +78,20 @@ export async function POST(request: NextRequest) {
         );
       }
       targetFamilyId = family_id;
+      targetFamilyUuid = familyCheck.rows[0].uuid;
       await client.query(
         'UPDATE users SET is_email_verified = true WHERE id = $1',
         [user.id]
       );
     } else {
+      // New family registration
       const familyResult = await client.query(
         `INSERT INTO families (name, created_by, created_at, updated_at)
-         VALUES ($1, $2, NOW(), NOW()) RETURNING id`,
+         VALUES ($1, $2, NOW(), NOW()) RETURNING id, uuid`,
         [`${full_name}'s Family`, user.id]
       );
       targetFamilyId = familyResult.rows[0].id;
+      targetFamilyUuid = familyResult.rows[0].uuid;
     }
 
     await client.query(
@@ -96,7 +122,14 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { message: isJoiningInvitation ? 'Akun terdaftar dan bergabung dengan keluarga.' : 'Akun terdaftar. Cek email untuk aktivasi.', user, family_id: targetFamilyId },
+      {
+        message: isJoiningInvitation
+          ? 'Akun terdaftar dan bergabung dengan keluarga.'
+          : 'Akun terdaftar. Cek email untuk aktivasi.',
+        user, // now includes uuid
+        family_id: targetFamilyId,
+        family_uuid: targetFamilyUuid,
+      },
       { status: 201 }
     );
   } catch (error) {

@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/context/auth-context';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getAuthHeaders } from '@/lib/api-client';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -17,7 +19,11 @@ export default function SettingsPage() {
     phone: '',
     gender: 'male',
     birth_date: '',
+    photo_url: '',
   });
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [family, setFamily] = useState({
     name: '',
     description: '',
@@ -28,23 +34,34 @@ export default function SettingsPage() {
     const fetchProfile = async () => {
       if (!user?.id) return;
 
-      const res = await fetch(`/api/user/profile`);
+      const res = await fetch(`/api/user/profile`, { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
+        const formatDate = (d: any) => {
+          if (!d) return '';
+          try {
+            return new Date(d).toISOString().split('T')[0]; // yyyy-MM-dd for <input type="date">
+          } catch {
+            return '';
+          }
+        };
+
         setProfile({
           full_name: data.user.full_name || '',
           email: data.user.email || '',
           phone: data.user.phone || '',
           gender: data.user.gender || 'male',
-          birth_date: data.user.birth_date || '',
+          birth_date: formatDate(data.user.birth_date),
+          photo_url: data.user.photo_url || '',
         });
+        setPhotoPreview(data.user.photo_url || null);
       }
 
-      const memberRes = await fetch(`/api/tree/me?user_id=${user.id}`);
+      const memberRes = await fetch(`/api/tree/me?user_id=${user.id}`, { headers: getAuthHeaders() });
       if (memberRes.ok) {
         const memberData = await memberRes.json();
         if (memberData.family_id) {
-          const familyRes = await fetch(`/api/family/${memberData.family_id}`);
+          const familyRes = await fetch(`/api/family/${memberData.family_id}`, { headers: getAuthHeaders() });
           if (familyRes.ok) {
             const familyData = await familyRes.json();
             setFamily({
@@ -59,16 +76,64 @@ export default function SettingsPage() {
     fetchProfile();
   }, [user?.id]);
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPhotoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSaveProfile = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/user/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile),
-      });
-      if (res.ok) {
-        alert('Profil tersimpan');
+      let payload: any = { ...profile };
+
+      if (photoFile) {
+        const formData = new FormData();
+        formData.append('photo', photoFile);
+        // Send other profile data as JSON string
+        formData.append('profile', JSON.stringify(profile));
+
+        // Build auth headers without Content-Type (browser sets multipart boundary)
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const uploadHeaders: HeadersInit = {};
+        if (token) uploadHeaders['Authorization'] = `Bearer ${token}`;
+        uploadHeaders['X-Timestamp'] = Date.now().toString();
+
+        const res = await fetch('/api/user/profile', {
+          method: 'PUT',
+          headers: uploadHeaders,
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user?.photo_url) {
+            setProfile(prev => ({ ...prev, photo_url: data.user.photo_url }));
+            setPhotoPreview(data.user.photo_url);
+          } else {
+            setPhotoPreview(null);
+          }
+          alert('Profil tersimpan');
+          setPhotoFile(null);
+        } else {
+          alert('Gagal menyimpan foto');
+        }
+      } else {
+        // No new photo, just update text fields
+        const res = await fetch('/api/user/profile', {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          alert('Profil tersimpan');
+        }
       }
     } catch (error) {
       alert('Gagal menyimpan');
@@ -82,7 +147,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/family', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(family),
       });
       if (res.ok) {
@@ -104,6 +169,39 @@ export default function SettingsPage() {
           <CardTitle>Profil</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Photo Upload */}
+          <div>
+            <Label>Foto Profil</Label>
+            <div className="flex items-center gap-4 mt-2">
+              <Avatar className="h-20 w-20">
+                {photoPreview && <AvatarImage src={photoPreview} alt="Foto profil" />}
+                <AvatarFallback className="bg-primary/10 text-primary text-3xl font-semibold border-2 border-primary/20">
+                  {profile.full_name ? profile.full_name[0].toUpperCase() : 'U'}
+                </AvatarFallback>
+              </Avatar>
+
+              <div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Pilih Foto
+                </Button>
+                {photoFile && (
+                  <p className="text-xs text-gray-500 mt-1">{photoFile.name}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div>
             <Label>Nama Lengkap</Label>
             <Input
