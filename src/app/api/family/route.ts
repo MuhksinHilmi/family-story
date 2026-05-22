@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await pool.query(
-      'SELECT id, name, description, created_by, created_at, updated_at FROM families WHERE id = $1',
+      'SELECT id, uuid, name, description, created_by, created_at, updated_at FROM families WHERE id = $1',
       [parseInt(id, 10)]
     );
 

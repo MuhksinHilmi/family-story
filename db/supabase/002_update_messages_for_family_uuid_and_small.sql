@@ -1,8 +1,16 @@
--- Supabase Migration 002: Update messages table for family_uuid + scope_type + small_family_id
--- This migration aligns the Supabase messages table with the new chat architecture
--- that uses family_uuid as the primary identifier (instead of integer family_id).
+-- Supabase Migration 002 (HISTORICAL / 2024-2025 era)
+-- This file was used during the transition from integer family_id to family_uuid + small_family_id.
+--
+-- ⚠️ 2026 CLEANUP NOTICE:
+-- - All `room_id` references have been REMOVED from the final schema (see 001_create_messages_realtime_broadcast.sql).
+-- - `small_family_id` is now UUID (users.uuid of husband), not INTEGER (see local migration 009).
+-- - Do NOT run this file as-is on a fresh Supabase project after 2026.
+-- - The authoritative, clean definition of the `messages` table is in migration 001 (after cleanup).
+--
+-- This file is kept only for historical record of how the schema evolved.
+-- If you are applying migrations in order, run 001 (clean version) instead of relying on this file.
 
--- Run this in Supabase SQL Editor.
+-- Original content below is left for reference only.
 
 -- 1. Add new columns
 ALTER TABLE public.messages
@@ -45,10 +53,13 @@ BEGIN
     topic_name := 'family:' || NEW.family_uuid || ':small:' || COALESCE(NEW.small_family_id::text, '');
   END IF;
 
+  -- LEGACY payload (still contains room_id for historical reference only)
+  -- Current production trigger (2026) is defined in 001_create_messages_realtime_broadcast.sql
+  -- and does NOT include room_id.
   PERFORM realtime.send(
     jsonb_build_object(
       'id', NEW.id,
-      'room_id', NEW.room_id,
+      'room_id', NEW.room_id,   -- ← removed in final 2026 schema
       'family_uuid', NEW.family_uuid,
       'scope_type', NEW.scope_type,
       'small_family_id', NEW.small_family_id,
@@ -73,11 +84,11 @@ CREATE TRIGGER messages_broadcast_trigger
   FOR EACH ROW
   EXECUTE FUNCTION public.broadcast_new_message();
 
--- 6. (Optional but recommended) Update comments
-COMMENT ON COLUMN public.messages.family_uuid IS 'Stable UUID of the family (main identifier for chat & realtime)';
-COMMENT ON COLUMN public.messages.scope_type IS 'general = whole family, small = nuclear family of one father';
-COMMENT ON COLUMN public.messages.small_family_id IS 'family_nodes.id of the father (only for small rooms)';
+-- 6. Historical comments (updated during 2026 cleanup)
+COMMENT ON COLUMN public.messages.family_uuid IS 'Stable UUID of the family (main identifier for chat & realtime) - still valid';
+COMMENT ON COLUMN public.messages.scope_type IS 'general = whole family, small = nuclear family of one father - still valid';
+COMMENT ON COLUMN public.messages.small_family_id IS 'DEPRECATED in this file: was INTEGER (family_nodes.id). In final 2026 schema it is UUID (users.uuid of husband). See migration 001 final version.';
 
--- Note:
--- The old column `family_id` (integer) is kept temporarily for backward compatibility.
--- You can drop it later after fully migrating all references to `family_uuid`.
+-- Note (2026):
+-- This migration is kept for history. The clean, current definition of the messages table + trigger
+-- lives in 001_create_messages_realtime_broadcast.sql (after room_id removal).

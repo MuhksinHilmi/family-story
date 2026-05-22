@@ -114,11 +114,14 @@ CREATE TABLE IF NOT EXISTS chat_rooms (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_rooms_family_uuid ON chat_rooms(family_uuid);
 CREATE INDEX IF NOT EXISTS idx_chat_rooms_family_uuid_scope ON chat_rooms(family_uuid, scope_type);
--- Chat Message Archive (Local)
+-- Chat Message Archive (Local) - LEGACY / DEPRECATED since 2026 cleanup (Migration 010)
+-- This table is no longer the active messages store.
+-- New authoritative table is `messages` (created in migration 010).
+-- Room identification now uses family_uuid + scope_type + small_family_id (UUID), not room_id.
 CREATE TABLE IF NOT EXISTS chat_message_archive (
   id UUID PRIMARY KEY,
-  room_id TEXT,
-  chat_room_id UUID REFERENCES chat_rooms(id),
+  room_id TEXT,                    -- LEGACY - no longer populated
+  chat_room_id UUID REFERENCES chat_rooms(id),  -- LEGACY - no longer populated
   user_id INTEGER,
   content JSONB,
   type TEXT,
@@ -131,6 +134,8 @@ CREATE TABLE IF NOT EXISTS chat_message_archive (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_archive_backup_date ON chat_message_archive (backup_date);
 CREATE INDEX IF NOT EXISTS idx_chat_archive_chat_room_id ON chat_message_archive (chat_room_id);
+
+COMMENT ON TABLE chat_message_archive IS 'LEGACY (pre-2026). Old daily backup table. Use the new `messages` table + `user_room_reads` instead. This table may be archived or dropped after historical data migration.';
 -- Backup Jobs
 CREATE TABLE IF NOT EXISTS backup_jobs (
   id SERIAL PRIMARY KEY,

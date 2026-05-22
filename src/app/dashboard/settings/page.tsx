@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/context/auth-context';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getAuthHeaders } from '@/lib/api-client';
+import { apiFetch } from '@/lib/api-client';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -34,7 +34,7 @@ export default function SettingsPage() {
     const fetchProfile = async () => {
       if (!user?.id) return;
 
-      const res = await fetch(`/api/user/profile`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`/api/user/profile`);
       if (res.ok) {
         const data = await res.json();
         const formatDate = (d: any) => {
@@ -57,11 +57,11 @@ export default function SettingsPage() {
         setPhotoPreview(data.user.photo_url || null);
       }
 
-      const memberRes = await fetch(`/api/tree/me?user_id=${user.id}`, { headers: getAuthHeaders() });
+      const memberRes = await apiFetch(`/api/tree/me?user_id=${user.id}`);
       if (memberRes.ok) {
         const memberData = await memberRes.json();
         if (memberData.family_id) {
-          const familyRes = await fetch(`/api/family/${memberData.family_id}`, { headers: getAuthHeaders() });
+          const familyRes = await apiFetch(`/api/family/${memberData.family_id}`);
           if (familyRes.ok) {
             const familyData = await familyRes.json();
             setFamily({
@@ -126,9 +126,8 @@ export default function SettingsPage() {
         }
       } else {
         // No new photo, just update text fields
-        const res = await fetch('/api/user/profile', {
+        const res = await apiFetch('/api/user/profile', {
           method: 'PUT',
-          headers: getAuthHeaders(),
           body: JSON.stringify(payload),
         });
         if (res.ok) {
@@ -145,9 +144,8 @@ export default function SettingsPage() {
   const handleSaveFamily = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/family', {
+      const res = await apiFetch('/api/family', {
         method: 'PUT',
-        headers: getAuthHeaders(),
         body: JSON.stringify(family),
       });
       if (res.ok) {
@@ -161,10 +159,10 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Pengaturan</h1>
+    <div className="space-y-6 bg-[#F5F0E8] min-h-screen">
+      <h1 className="text-2xl font-bold text-[#3B2F1E]">Pengaturan</h1>
 
-      <Card>
+      <Card className="bg-[#FDFAF5] border border-[#D4C4A8]">
         <CardHeader>
           <CardTitle>Profil</CardTitle>
         </CardHeader>
@@ -175,7 +173,7 @@ export default function SettingsPage() {
             <div className="flex items-center gap-4 mt-2">
               <Avatar className="h-20 w-20">
                 {photoPreview && <AvatarImage src={photoPreview} alt="Foto profil" />}
-                <AvatarFallback className="bg-primary/10 text-primary text-3xl font-semibold border-2 border-primary/20">
+                <AvatarFallback className="bg-[#D6EAD9] text-[#2E5239] text-3xl font-semibold border-2 border-[#4A7C59]/30">
                   {profile.full_name ? profile.full_name[0].toUpperCase() : 'U'}
                 </AvatarFallback>
               </Avatar>
@@ -196,7 +194,7 @@ export default function SettingsPage() {
                   Pilih Foto
                 </Button>
                 {photoFile && (
-                  <p className="text-xs text-gray-500 mt-1">{photoFile.name}</p>
+                  <p className="text-xs text-[#9C8B75] mt-1">{photoFile.name}</p>
                 )}
               </div>
             </div>
@@ -232,7 +230,7 @@ export default function SettingsPage() {
             <select
               value={profile.gender}
               onChange={(e) => setProfile({ ...profile, gender: e.target.value })}
-              className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              className="flex h-10 w-full rounded-md border border-[#D4C4A8] bg-[#EDE4D3] px-3 py-2 text-base text-[#3B2F1E] ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               <option value="male">Laki-laki</option>
               <option value="female">Perempuan</option>
@@ -247,13 +245,13 @@ export default function SettingsPage() {
               className="mt-1"
             />
           </div>
-          <Button className="mt-4" onClick={handleSaveProfile} disabled={isLoading}>
+          <Button className="mt-4 bg-[#4A7C59] hover:bg-[#2E5239] text-white" onClick={handleSaveProfile} disabled={isLoading}>
             {isLoading ? 'Menyimpan...' : 'Simpan Perubahan'}
           </Button>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-[#FDFAF5] border border-[#D4C4A8]">
         <CardHeader>
           <CardTitle>Keluarga</CardTitle>
         </CardHeader>
@@ -274,7 +272,7 @@ export default function SettingsPage() {
               className="mt-1"
             />
           </div>
-          <Button className="mt-4" onClick={handleSaveFamily} disabled={isLoading}>
+          <Button className="mt-4 bg-[#4A7C59] hover:bg-[#2E5239] text-white" onClick={handleSaveFamily} disabled={isLoading}>
             {isLoading ? 'Menyimpan...' : 'Simpan'}
           </Button>
         </CardContent>

@@ -1,24 +1,26 @@
 -- Supabase Migration: Chat messages table + Realtime Broadcast via trigger + Family RLS
 -- Follows PRD integration_chat.md + current Supabase Broadcast from Database docs (2026)
 
--- 1. Core messages table (source of truth di Supabase, H+3 retention via cron)
--- All ID fields use UUID to match Supabase auth.uid() and client-generated UUIDs
+-- 1. Core messages table (Supabase - transient source for realtime + H+3 retention)
+-- This is NOT the permanent store. Local Postgres `messages` table is the authoritative history.
+-- Room is identified by composite key: family_uuid + scope_type + small_family_id (users.uuid of husband)
+-- No `room_id` column is used anymore (cleaned up in 2026).
 CREATE TABLE IF NOT EXISTS public.messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  room_id UUID NOT NULL,                      -- uses family_uuid for general, family_uuid+small for small rooms
-  family_uuid UUID NOT NULL,                  -- main identifier for topics
+  family_uuid UUID NOT NULL,                  -- main logical identifier
   scope_type TEXT NOT NULL DEFAULT 'general' CHECK (scope_type IN ('general', 'small')),
-  small_family_id UUID,                       -- UUID of father node for small rooms
-  sender_id UUID NOT NULL,                    -- matches auth.uid() (UUID from users.uuid)
+  small_family_id UUID,                       -- users.uuid of husband/father (nullable for general room)
+  sender_id UUID NOT NULL,                    -- matches auth.uid()
   sender_name_snapshot TEXT,
+  sender_photo_snapshot TEXT,
   body TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Indexes required by PRD
-CREATE INDEX IF NOT EXISTS idx_messages_room_created_at ON public.messages (room_id, created_at DESC);
+-- Indexes (no room_id)
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON public.messages (created_at);
-CREATE INDEX IF NOT EXISTS idx_messages_family_uuid_created_at ON public.messages (family_uuid, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_family_uuid_created_at ON public.messages (family_uuid, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_room_composite ON public.messages (family_uuid, scope_type, small_family_id, created_at DESC);
 
 -- 2. Enable RLS on messages (public schema)
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
@@ -108,21 +110,23 @@ BEGIN
     topic_name := 'family:' || NEW.family_uuid || ':small:' || COALESCE(NEW.small_family_id::text, '');
   END IF;
 
-  -- Broadcast custom payload (matches PRD section 7.3)
+  -- Broadcast custom payload (no room_id - 2026 cleanup)
+  -- Frontend maps these fields directly to ChatMessage type.
   PERFORM realtime.send(
     jsonb_build_object(
       'id', NEW.id,
-      'room_id', NEW.room_id,
       'family_uuid', NEW.family_uuid,
       'scope_type', NEW.scope_type,
+      'small_family_id', NEW.small_family_id,
       'sender_id', NEW.sender_id,
       'sender_name_snapshot', NEW.sender_name_snapshot,
+      'sender_photo_snapshot', NEW.sender_photo_snapshot,
       'body', NEW.body,
       'created_at', NEW.created_at
     ),
-    'message_created',   -- event name
+    'message_created',
     topic_name,
-    true                 -- private channel (must match client config)
+    true
   );
 
   RETURN NULL;
@@ -140,13 +144,12 @@ CREATE TRIGGER messages_broadcast_trigger
 -- GRANT SELECT, INSERT ON public.messages TO anon, authenticated;
 -- (RLS already protects rows)
 
--- 8. Comments for documentation
-COMMENT ON TABLE public.messages IS 'Chat messages (Supabase source of truth). Retained H+3 via separate cron job. Broadcast to family rooms via DB trigger.';
-COMMENT ON FUNCTION public.broadcast_new_message() IS 'Sends realtime broadcast on new message using Supabase Broadcast from Database (no service key required in app code).';
+-- 8. Comments for documentation (updated 2026 cleanup)
+COMMENT ON TABLE public.messages IS 'Transient Supabase table for realtime delivery only (H+3 retention). Permanent authoritative messages live in local Postgres `messages` table. Room identified by family_uuid + scope_type + small_family_id (no room_id column).';
+COMMENT ON FUNCTION public.broadcast_new_message() IS 'Broadcasts new message via Supabase Broadcast (no service key needed). Payload does not include legacy room_id.';
 
--- After applying this migration:
--- 1. Run: supabase db advisors (or MCP get_advisors)
--- 2. Verify RLS with RLS Tester in dashboard
--- 3. Test with real family member JWT
--- 4. Create daily sync job that upserts from messages (created_at >= now()-4 days) into chat_message_archive
--- 5. Add cron for H+3 deletion on messages (created_at < now()-3 days) if not using pg_cron yet
+-- After applying this migration (2026 cleanup):
+-- - No more `room_id` anywhere in chat system.
+-- - All code must use family_uuid + scope_type + small_family_id (users.uuid of husband for small rooms).
+-- - Create daily sync / replication job from this table → local `messages` table (not the old chat_message_archive).
+-- - Add pg_cron or Edge Function for H+3 hard delete on this table.

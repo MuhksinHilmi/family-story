@@ -5,15 +5,15 @@ import { cn } from '@/lib/utils';
 const buttonVariants = cva(
   'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background',
   {
-variants: {
-       variant: {
-         default: 'bg-primary text-primary-foreground hover:opacity-90',
-         destructive: 'bg-destructive text-destructive-foreground hover:opacity-90',
-         outline: 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
-         secondary: 'bg-secondary text-secondary-foreground hover:opacity-90',
-         ghost: 'hover:bg-gray-100 hover:text-gray-900',
-         link: 'underline text-primary',
-       },
+    variants: {
+      variant: {
+        default: 'bg-primary text-primary-foreground hover:opacity-90',
+        destructive: 'bg-destructive text-destructive-foreground hover:opacity-90',
+        outline: 'border border-[#D4C4A8] bg-[#FDFAF5] text-[#6B5B45] hover:bg-[#EDE4D3]',
+        secondary: 'bg-secondary text-secondary-foreground hover:opacity-90',
+        ghost: 'hover:bg-[#EDE4D3] hover:text-[#3B2F1E]',
+        link: 'underline text-primary',
+      },
       size: {
         default: 'h-10 px-4 py-2',
         sm: 'h-9 rounded-md px-3',

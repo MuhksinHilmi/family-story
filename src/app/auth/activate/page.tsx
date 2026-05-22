@@ -51,17 +51,17 @@ export default function ActivatePage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F0E8]">
+      <Card className="w-full max-w-md bg-[#FDFAF5] border border-[#D4C4A8]">
         <CardHeader>
           <CardTitle>Aktivasi Akun</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {status === 'loading' && <p>Mengaktifkan akun...</p>}
+          {status === 'loading' && <p className="text-[#6B5B45]">Mengaktifkan akun...</p>}
           {status === 'success' && (
             <div>
-              <p className="text-green-600">{message}</p>
-              <p className="text-sm text-gray-500 mt-2">Anda akan diarahkan ke halaman pohon keluarga...</p>
+              <p className="text-[#4A7C59]">{message}</p>
+              <p className="text-sm text-[#9C8B75] mt-2">Anda akan diarahkan ke halaman pohon keluarga...</p>
             </div>
           )}
           {status === 'error' && (

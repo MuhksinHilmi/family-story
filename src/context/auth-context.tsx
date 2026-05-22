@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { User } from '@/types';
+import { registerLogout, triggerGlobalLogout } from '@/lib/global-logout';
 
 interface AuthContextType {
   user: User | null;
@@ -47,6 +48,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Register this logout instance so non-React code (fetch helpers, global error handlers) can trigger it
+  useEffect(() => {
+    registerLogout(() => {
+      setToken(null);
+      setUser(null);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    });
+  }, []);
+
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
@@ -80,12 +91,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [token]);
 
+  // Global error handlers — catch SyntaxError from failed chunk loads (often caused by expired/invalid token)
+  // and any unhandled auth-related promise rejections, then force logout from ANY page.
+  useEffect(() => {
+    const handleWindowError = (event: ErrorEvent) => {
+      const message = event.message || '';
+      const error = event.error;
+
+      // "Invalid or unexpected token" usually means the browser tried to parse HTML (error page / redirect)
+      // as JavaScript — classic symptom of an authenticated chunk failing because the token was rejected.
+      const isSyntaxError = error instanceof SyntaxError || message.includes('SyntaxError');
+      const isUnexpectedToken = message.includes('Invalid or unexpected token') ||
+                                message.includes('Unexpected token');
+
+      if (isSyntaxError || isUnexpectedToken) {
+        // Do not spam console in production; just force logout + clean navigation
+        triggerGlobalLogout();
+      }
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const status = reason?.status || reason?.response?.status;
+      const message = String(reason?.message || reason || '');
+
+      if (status === 401 || message.includes('401') || message.toLowerCase().includes('unauthorized')) {
+        triggerGlobalLogout();
+      }
+    };
+
+    window.addEventListener('error', handleWindowError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleWindowError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   const logout = () => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    router.push('/auth/login');
+    // Use the global trigger for consistent hard navigation (handles broken React state)
+    triggerGlobalLogout();
   };
 
   return (

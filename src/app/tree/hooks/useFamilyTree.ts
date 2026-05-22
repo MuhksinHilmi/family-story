@@ -24,6 +24,7 @@ interface UseFamilyTreeReturn {
   isModalOpen: boolean;
   isLoading: boolean;
   familyId: string | null;
+  familyUuid: string | null;
   setConnectionMode: (mode: ConnectionMode) => void;
   openModal: () => void;
   closeModal: () => void;
@@ -48,9 +49,10 @@ export function useFamilyTree(): UseFamilyTreeReturn {
    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
    const [connectionMode, setConnectionMode] = useState<ConnectionMode>('add');
    const [isModalOpen, setIsModalOpen] = useState(false);
-   const [isLoading, setIsLoading] = useState(false);
-   const [familyId, setFamilyId] = useState<string | null>(null);
-   const { user } = useAuth();
+    const [isLoading, setIsLoading] = useState(false);
+    const [familyId, setFamilyId] = useState<string | null>(null);
+    const [familyUuid, setFamilyUuid] = useState<string | null>(null);
+    const { user } = useAuth();
 
   const openModal = useCallback(() => setIsModalOpen(true), []);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
@@ -75,6 +77,17 @@ export function useFamilyTree(): UseFamilyTreeReturn {
         setFamilyId(fid);
         setNodes(data.nodes);
         setEdges(normalizeEdges(data.edges));
+
+        // Also fetch the stable family_uuid for share links
+        try {
+          const famRes = await fetch(`/api/family?id=${fid}`);
+          if (famRes.ok) {
+            const famData = await famRes.json();
+            if (famData.uuid) setFamilyUuid(famData.uuid);
+          }
+        } catch (e) {
+          console.warn('Could not load family uuid for share link');
+        }
       }
     } catch (error) {
       console.error('Load tree error:', error);
@@ -162,6 +175,14 @@ export function useFamilyTree(): UseFamilyTreeReturn {
           setFamilyId(fid);
           setNodes(treeData.nodes);
           setEdges(treeData.edges);
+
+          try {
+            const famRes = await fetch(`/api/family?id=${fid}`);
+            if (famRes.ok) {
+              const famData = await famRes.json();
+              if (famData.uuid) setFamilyUuid(famData.uuid);
+            }
+          } catch {}
         }
       } else if (data.family_id) {
         const fid = String(data.family_id);
@@ -172,6 +193,14 @@ export function useFamilyTree(): UseFamilyTreeReturn {
           setFamilyId(fid);
           setNodes(treeData.nodes);
           setEdges(treeData.edges);
+
+          try {
+            const famRes = await fetch(`/api/family?id=${fid}`);
+            if (famRes.ok) {
+              const famData = await famRes.json();
+              if (famData.uuid) setFamilyUuid(famData.uuid);
+            }
+          } catch {}
         }
       }
     } catch (error) {
@@ -384,6 +413,7 @@ export function useFamilyTree(): UseFamilyTreeReturn {
     isModalOpen,
     isLoading,
     familyId,
+    familyUuid,
     setConnectionMode,
     openModal,
     closeModal,

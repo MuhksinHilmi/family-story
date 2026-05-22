@@ -1,10 +1,12 @@
 // src/lib/fetch-with-auth.ts
 // Reusable fetch helper that automatically handles 401 (Unauthorized)
-// by calling the provided onUnauthorized callback (usually logout)
+// by triggering global logout (works from any page, even outside React components)
 
 import { getAuthHeaders } from './api-client';
+import { triggerGlobalLogout } from './global-logout';
 
 type FetchWithAuthOptions = RequestInit & {
+  /** Optional extra callback (still supported for backward compatibility) */
   onUnauthorized?: () => void;
 };
 
@@ -24,13 +26,13 @@ export async function fetchWithAuth(
     headers,
   });
 
-  // Jika server bilang token tidak valid / expired
+  // Token invalid/expired → logout immediately from anywhere
   if (response.status === 401) {
     if (onUnauthorized) {
       onUnauthorized();
     }
-    // Kamu bisa uncomment ini kalau mau throw otomatis
-    // throw new Error('Unauthorized');
+    // Always trigger the global one (safe, idempotent)
+    triggerGlobalLogout();
   }
 
   return response;

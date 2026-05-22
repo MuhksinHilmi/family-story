@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     const isJoiningInvitation = !!(family_id || family_uuid);
 
     if (family_uuid) {
-      // Preferred path: join via stable family_uuid (new flow)
+      // Preferred path: join via stable family_uuid (share link)
       const familyCheck = await client.query(
         'SELECT id, uuid FROM families WHERE uuid = $1',
         [family_uuid]
@@ -60,10 +60,8 @@ export async function POST(request: NextRequest) {
       }
       targetFamilyId = familyCheck.rows[0].id;
       targetFamilyUuid = familyCheck.rows[0].uuid;
-      await client.query(
-        'UPDATE users SET is_email_verified = true WHERE id = $1',
-        [user.id]
-      );
+      // NOTE: Do NOT auto-verify email for share link.
+      // User must still activate via email.
     } else if (family_id) {
       // Legacy path (still supported during transition)
       const familyCheck = await client.query(
@@ -79,10 +77,7 @@ export async function POST(request: NextRequest) {
       }
       targetFamilyId = family_id;
       targetFamilyUuid = familyCheck.rows[0].uuid;
-      await client.query(
-        'UPDATE users SET is_email_verified = true WHERE id = $1',
-        [user.id]
-      );
+      // NOTE: Do NOT auto-verify email here either.
     } else {
       // New family registration
       const familyResult = await client.query(
@@ -100,31 +95,37 @@ export async function POST(request: NextRequest) {
       [targetFamilyId, user.id]
     );
 
-    if (isJoiningInvitation) {
-      await client.query(
-        `UPDATE family_nodes 
-         SET user_id = $1, invitation_status = 'accepted', updated_at = NOW()
-         WHERE invitation_email = $2 AND family_id = $3`,
-        [user.id, email, targetFamilyId]
-      );
-    } else {
+    // Node creation logic (works for both normal registration and share link)
+    // 1. Try to claim an existing pending invitation node (old "Tambah Anggota" flow)
+    const claimResult = await client.query(
+      `UPDATE family_nodes 
+       SET user_id = $1, invitation_status = 'accepted', updated_at = NOW()
+       WHERE invitation_email = $2 AND family_id = $3
+       RETURNING id`,
+      [user.id, email, targetFamilyId]
+    );
+
+    if (claimResult.rows.length === 0) {
+      // No pending invitation found → create a fresh node.
+      // This covers:
+      // - Normal registration (new family)
+      // - Share link registration (existing family via family_uuid)
       await client.query(
         `INSERT INTO family_nodes (family_id, user_id, full_name, gender, birth_date, position_x, position_y, invitation_status, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, 0, 0, 'accepted', NOW(), NOW())`,
+         VALUES ($1, $2, $3, $4, $5, 0, 0, 'accepted', NOW(), NOW())`,
         [targetFamilyId, user.id, full_name, gender, birth_date]
       );
     }
 
     await client.query('COMMIT');
 
-    if (!isJoiningInvitation) {
-      await sendActivationLink(email, activationToken);
-    }
+    // Always send activation email (user must activate before logging in)
+    await sendActivationLink(email, activationToken);
 
     return NextResponse.json(
       {
         message: isJoiningInvitation
-          ? 'Akun terdaftar dan bergabung dengan keluarga.'
+          ? 'Akun terdaftar dan berhasil bergabung dengan keluarga. Cek email untuk aktivasi.'
           : 'Akun terdaftar. Cek email untuk aktivasi.',
         user, // now includes uuid
         family_id: targetFamilyId,

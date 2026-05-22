@@ -1,19 +1,31 @@
-'use client';
+"use client";
 
-import { usePathname, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Home, Users, TreePine, FileText, MessageCircle, Settings, LogOut, Shield, Menu, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/context/auth-context';
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Home,
+  Users,
+  Network,
+  FileText,
+  MessageCircle,
+  Settings,
+  LogOut,
+  Shield,
+  Menu,
+  X,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/context/auth-context";
+import { apiFetch } from "@/lib/api-client";
 
 const navItems = [
-  { href: '/dashboard', icon: Home, label: 'Dashboard' },
-  { href: '/tree', icon: TreePine, label: 'Pohon Keluarga' },
-  { href: '/members', icon: Users, label: 'Anggota' },
-  { href: '/documents', icon: FileText, label: 'Dokumen' },
-  { href: '/chat', icon: MessageCircle, label: 'Chat' },
-  { href: '/dashboard/settings', icon: Settings, label: 'Pengaturan' },
+  { href: "/feeds", icon: Home, label: "Feeds" },
+  { href: "/tree", icon: Network, label: "Pohon Keluarga" },
+  { href: "/members", icon: Users, label: "Anggota" },
+  { href: "/documents", icon: FileText, label: "Dokumen" },
+  { href: "/chat", icon: MessageCircle, label: "Chat" },
+  { href: "/dashboard/settings", icon: Settings, label: "Pengaturan" },
 ];
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {
@@ -21,32 +33,72 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [hasUnreadChat, setHasUnreadChat] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token && !pathname?.startsWith('/auth') && !pathname?.startsWith('/invitations') && pathname !== '/') {
-      router.push('/auth/login');
+    const token = localStorage.getItem("token");
+    if (
+      !token &&
+      !pathname?.startsWith("/auth") &&
+      !pathname?.startsWith("/invitations") &&
+      pathname !== "/"
+    ) {
+      router.push("/auth/login");
     }
   }, [pathname, router]);
 
-  const isAuthPage = pathname?.startsWith('/auth') || pathname?.startsWith('/invitations') || pathname === '/';
+  const isAuthPage =
+    pathname?.startsWith("/auth") ||
+    pathname?.startsWith("/invitations") ||
+    pathname === "/";
 
   if (isAuthPage) {
     return children;
   }
 
+  // Header height is h-16 = 64px
+  // Content area must be exactly 100vh - 64px, no extra py padding
+  const isChat = pathname?.startsWith("/chat");
+
+  // Fetch whether there is any unread chat (for red dot indicator in sidebar)
+  useEffect(() => {
+    const fetchUnreadStatus = async () => {
+      try {
+        const res = await apiFetch("/api/chat/rooms");
+        if (!res.ok) return;
+
+        const rooms: any[] = await res.json();
+        const hasAnyUnread = rooms.some((r) => (r.unread_count || 0) > 0);
+        setHasUnreadChat(hasAnyUnread);
+      } catch {
+        // Fail silently — this is just a visual indicator
+      }
+    };
+
+    fetchUnreadStatus();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+    // ✅ FIX 1: root is h-screen flex flex-col (not min-h-screen)
+    <div className="h-screen flex flex-col bg-[#F5F0E8] overflow-hidden">
+      {/* Header — fixed height, flex-shrink-0 so it never compresses */}
+      <header className="bg-[#FDFAF5] border-b border-[#D4C4A8] flex-shrink-0 z-10">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Link href="/dashboard" className="flex items-center space-x-2">
-              <Shield className="h-8 w-8 text-primary" />
-              <span className="font-bold text-2xl text-gray-900">CeritaKeluarga</span>
+            <Link href="/feeds" className="flex items-center space-x-2">
+              <Shield className="h-8 w-8 text-[#4A7C59]" />
+              <span className="font-bold text-2xl text-[#3B2F1E]">
+                CeritaKeluarga
+              </span>
             </Link>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={logout} className="text-gray-600 hover:text-gray-900">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              className="text-[#6B5B45] hover:bg-[#EDE4D3]"
+            >
               <LogOut className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Keluar</span>
             </Button>
@@ -54,60 +106,111 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
               variant="ghost"
               size="sm"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden text-gray-600 hover:text-gray-900"
+              className="md:hidden text-[#6B5B45] hover:bg-[#EDE4D3]"
             >
-              {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              {mobileMenuOpen ? (
+                <X className="h-4 w-4" />
+              ) : (
+                <Menu className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>
       </header>
-      
-      <div className="container mx-auto px-4 py-6 flex-1 min-h-[calc(100vh-120px)]">
-        <div className="flex h-full gap-6">
-          <nav className={`w-56 flex-shrink-0 transition-all duration-300 md:block ${mobileMenuOpen ? 'block' : 'hidden'}`}>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="space-y-1">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
-                      pathname === item.href 
-                        ? 'bg-primary/10 text-primary' 
-                        : 'text-gray-700 hover:bg-primary/5 hover:text-primary'
-                    }`}
-                  >
-                    <item.icon className="h-5 w-5" />
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
+
+      {/*
+        ✅ FIX 2: content row takes remaining height via flex-1 + min-h-0
+        - Chat page: no padding (p-0) so chat fills edge-to-edge
+        - Other pages: normal padding (p-6) for breathing room
+      */}
+      <div
+        className={[
+          "flex flex-1 min-h-0 container mx-auto w-full",
+          isChat ? "p-0 gap-0" : "px-4 py-6 gap-6",
+        ].join(" ")}
+      >
+        {/* Desktop sidebar nav */}
+        <nav
+          className={[
+            "w-56 flex-shrink-0 md:block transition-all duration-300",
+            mobileMenuOpen ? "block" : "hidden",
+            // Chat page: add padding back since container has p-0
+            isChat ? "px-4 py-6" : "",
+          ].join(" ")}
+        >
+          <div className="bg-[#FDFAF5] rounded-xl border border-[#D4C4A8] p-4 shadow-sm">
+            <div className="space-y-1">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
+                    pathname === item.href
+                      ? "bg-[#D6EAD9] text-[#2E5239]"
+                      : "text-[#6B5B45] hover:bg-[#D6EAD9] hover:text-[#2E5239]"
+                  }`}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+
+                  {/* Red dot indicator for unread messages in Chat */}
+                  {item.href === "/chat" && hasUnreadChat && (
+                    <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+                  )}
+                </Link>
+              ))}
             </div>
-          </nav>
-          <nav className={`fixed inset-0 z-40 bg-black bg-opacity-50 transition-opacity duration-300 md:hidden ${mobileMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setMobileMenuOpen(false)}>
-            <div className="absolute left-0 top-0 h-full w-56 bg-white border-r border-gray-200 p-4">
-              <div className="space-y-1">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
-                      pathname === item.href 
-                        ? 'bg-primary/10 text-primary' 
-                        : 'text-gray-700 hover:bg-primary/5 hover:text-primary'
-                    }`}
-                  >
-                    <item.icon className="h-5 w-5" />
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
+          </div>
+        </nav>
+
+        {/* Mobile overlay nav */}
+        <nav
+          className={`fixed inset-0 z-40 bg-black bg-opacity-50 transition-opacity duration-300 md:hidden ${
+            mobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+          onClick={() => setMobileMenuOpen(false)}
+        >
+          <div className="absolute left-0 top-0 h-full w-56 bg-[#FDFAF5] border-r border-[#D4C4A8] p-4">
+            <div className="space-y-1">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
+                    pathname === item.href
+                      ? "bg-[#D6EAD9] text-[#2E5239]"
+                      : "text-[#6B5B45] hover:bg-[#D6EAD9] hover:text-[#2E5239]"
+                  }`}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+
+                  {/* Red dot indicator for unread messages in Chat (mobile) */}
+                  {item.href === "/chat" && hasUnreadChat && (
+                    <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+                  )}
+                </Link>
+              ))}
             </div>
-</nav>
-          <main className="flex-1">{children}</main>
-        </div>
+          </div>
+        </nav>
+
+        {/*
+          ✅ FIX 3: main is flex-1 + min-h-0 + overflow-hidden
+          This passes exact remaining height down to children (chat page, etc.)
+          Chat page: no padding, full bleed
+          Other pages: normal padding
+        */}
+        <main
+          className={[
+            "flex-1 min-h-0 overflow-hidden flex flex-col",
+            isChat ? "" : "py-0",
+          ].join(" ")}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

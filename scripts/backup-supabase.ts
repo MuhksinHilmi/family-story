@@ -2,10 +2,28 @@
 
 /**
  * scripts/backup-supabase.ts
- * - Run daily to backup messages from Supabase -> local Postgres
- * - Then soft-delete (set archived=true) messages that were backed up
  *
- * Usage: NODE_ENV=production SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... LOCAL_POSTGRES_URL=... node scripts/backup-supabase.js YYYY-MM-DD
+ * Daily (or on-demand) replication from Supabase `messages` (transient, H+3)
+ * into local Postgres `messages` table (permanent authoritative store).
+ *
+ * This script is the safety net so that:
+ *   - Refreshing the chat page always shows history (even after Supabase deletes old rows)
+ *   - New family members can see past messages
+ *   - We have a durable backup independent of Supabase retention
+ *
+ * IMPORTANT (2026 architecture):
+ *   - No more `room_id`. Room is identified by (family_uuid + scope_type + small_family_id)
+ *   - Target table = `messages` (created in migration 011), NOT the legacy `chat_message_archive`
+ *   - Supabase will hard-delete messages older than 3 days via its own cron / pg_cron
+ *   - This script only does UPSERT (never deletes from local)
+ *
+ * Usage:
+ *   node scripts/backup-supabase.ts [YYYY-MM-DD]
+ *
+ * Environment variables required:
+ *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, LOCAL_POSTGRES_URL
+ *
+ * Recommended schedule: once per day (e.g. 01:00 WIB) via cron / GitHub Actions / etc.
  */
 
 import { initSupabaseServer } from '../src/lib/supabase-server';
@@ -20,9 +38,26 @@ dotenv.config();
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-const READ_BATCH = Number(process.env.BACKUP_READ_BATCH || 1000);
-const DELETE_BATCH = Number(process.env.BACKUP_DELETE_BATCH || 500);
-const BACKUP_GRACE_DAYS = Number(process.env.BACKUP_GRACE_DAYS || 3); // user chose 3
+const READ_BATCH = Number(process.env.BACKUP_READ_BATCH || 2000);
+const WINDOW_DAYS = Number(process.env.BACKUP_WINDOW_DAYS || 5); // pull last N days to avoid gaps
+
+interface SupabaseMessage {
+  id: string;
+  family_uuid: string;
+  scope_type: 'general' | 'small';
+  small_family_id: string | null;
+  sender_id: string;
+  sender_name_snapshot: string | null;
+  sender_photo_snapshot: string | null;
+  body: string;
+  type?: string;
+  media_url?: string | null;
+  media_mime_type?: string | null;
+  media_size_bytes?: number | null;
+  thumbnail_url?: string | null;
+  created_at: string;
+  deleted?: boolean;
+}
 
 async function run() {
   const supabase = initSupabaseServer();
@@ -30,120 +65,155 @@ async function run() {
   await pg.connect();
 
   const targetArg = process.argv[2];
-  const targetDate = targetArg ? dayjs.tz(targetArg, 'Asia/Jakarta') : dayjs().tz('Asia/Jakarta').subtract(1, 'day');
-  const start = targetDate.startOf('day').toISOString();
-  const end = targetDate.add(1, 'day').startOf('day').toISOString();
-  const backupDate = targetDate.format('YYYY-MM-DD');
+  const baseDate = targetArg
+    ? dayjs.tz(targetArg, 'Asia/Jakarta')
+    : dayjs().tz('Asia/Jakarta');
 
-  console.log(`Backing up messages from ${start} to ${end} (WIB) as ${backupDate}`);
+  // Pull a safe window (e.g. last 5 days) so we never miss messages due to timing jitter
+  const start = baseDate.subtract(WINDOW_DAYS, 'day').startOf('day').toISOString();
+  const end = baseDate.endOf('day').toISOString();
+  const runDate = baseDate.format('YYYY-MM-DD');
 
+  console.log(`[Backup] Replicating Supabase messages → local "messages" table`);
+  console.log(`[Backup] Window: ${start} → ${end} (WIB)  |  Run date: ${runDate}`);
+
+  // Create / update job record
   const jobRes = await pg.query(
-    'INSERT INTO backup_jobs(backup_date, started_at, status) VALUES($1, now(), $2) RETURNING id',
-    [backupDate, 'RUNNING']
+    `INSERT INTO backup_jobs(backup_date, started_at, status)
+     VALUES($1, now(), 'RUNNING') RETURNING id`,
+    [runDate]
   );
   const jobId = jobRes.rows[0].id;
 
-  let supabaseCount = 0;
-  let localCount = 0;
-  const backedUpIds: string[] = [];
-
+  let totalProcessed = 0;
   let offset = 0;
+
   while (true) {
     const { data, error } = await supabase
       .from('messages')
-      .select('*')
+      .select(`
+        id, family_uuid, scope_type, small_family_id,
+        sender_id, sender_name_snapshot, sender_photo_snapshot,
+        body, type, media_url, media_mime_type, media_size_bytes, thumbnail_url,
+        created_at, deleted
+      `)
       .gte('created_at', start)
       .lt('created_at', end)
       .order('created_at', { ascending: true })
-      .limit(READ_BATCH)
       .range(offset, offset + READ_BATCH - 1);
 
     if (error) {
-      console.error('Supabase read error', error);
-      await pg.query('UPDATE backup_jobs SET finished_at=now(), status=$1, error_text=$2 WHERE id=$3', ['FAILED', JSON.stringify(error), jobId]);
+      console.error('[Backup] Supabase read error:', error);
+      await pg.query(
+        'UPDATE backup_jobs SET finished_at=now(), status=$1, error_text=$2 WHERE id=$3',
+        ['FAILED', JSON.stringify(error), jobId]
+      );
       await pg.end();
-      return process.exit(1);
+      process.exit(1);
     }
 
     if (!data || data.length === 0) break;
 
-    // upsert to local
+    const rows: SupabaseMessage[] = data;
+
+    // Build bulk upsert for the new `messages` table
+    const columns = [
+      'id', 'family_uuid', 'scope_type', 'small_family_id',
+      'sender_id', 'sender_name_snapshot', 'sender_photo_snapshot',
+      'body', 'type', 'media_url', 'media_mime_type', 'media_size_bytes',
+      'thumbnail_url', 'created_at', 'deleted'
+    ];
+
     const values: any[] = [];
-    const rows = data;
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      values.push(r.id, r.room_id, r.user_id, JSON.stringify(r.content || null), r.type || null, r.created_at || null, r.edited_at || null, r.deleted || false, JSON.stringify(r.metadata || null), backupDate);
-      backedUpIds.push(r.id);
-    }
-
     const placeholders: string[] = [];
-    for (let i = 0; i < rows.length; i++) {
-      const base = i * 10;
-      placeholders.push(`($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9},$${base + 10})`);
-    }
 
-    const upsertQuery = `INSERT INTO chat_message_archive(id, room_id, user_id, content, type, created_at, edited_at, deleted, metadata, backup_date)
+    rows.forEach((r, i) => {
+      const base = i * columns.length;
+
+      values.push(
+        r.id,
+        r.family_uuid,
+        r.scope_type,
+        r.small_family_id,
+        r.sender_id,
+        r.sender_name_snapshot,
+        r.sender_photo_snapshot,
+        r.body,
+        r.type || 'text',
+        r.media_url || null,
+        r.media_mime_type || null,
+        r.media_size_bytes || null,
+        r.thumbnail_url || null,
+        r.created_at,
+        r.deleted ?? false
+      );
+
+      const ph = columns.map((_, j) => `$${base + j + 1}`).join(',');
+      placeholders.push(`(${ph})`);
+    });
+
+    const upsertSql = `
+      INSERT INTO messages (${columns.join(',')})
       VALUES ${placeholders.join(',')}
-      ON CONFLICT (id) DO UPDATE SET content = EXCLUDED.content, edited_at = EXCLUDED.edited_at, deleted = EXCLUDED.deleted, metadata = EXCLUDED.metadata`;
+      ON CONFLICT (id) DO UPDATE SET
+        sender_name_snapshot = EXCLUDED.sender_name_snapshot,
+        sender_photo_snapshot = EXCLUDED.sender_photo_snapshot,
+        body = EXCLUDED.body,
+        type = EXCLUDED.type,
+        media_url = EXCLUDED.media_url,
+        media_mime_type = EXCLUDED.media_mime_type,
+        media_size_bytes = EXCLUDED.media_size_bytes,
+        thumbnail_url = EXCLUDED.thumbnail_url,
+        deleted = EXCLUDED.deleted
+    `;
 
     try {
       await pg.query('BEGIN');
-      await pg.query(upsertQuery, values);
+      await pg.query(upsertSql, values);
       await pg.query('COMMIT');
-      supabaseCount += rows.length;
-    } catch (e) {
+
+      totalProcessed += rows.length;
+      console.log(`[Backup] Upserted chunk: ${rows.length} messages (offset ${offset})`);
+    } catch (e: any) {
       await pg.query('ROLLBACK');
-      console.error('PG upsert error', e);
-      await pg.query('UPDATE backup_jobs SET finished_at=now(), status=$1, error_text=$2 WHERE id=$3', ['FAILED', JSON.stringify(e), jobId]);
+      console.error('[Backup] Local Postgres upsert error:', e);
+      await pg.query(
+        'UPDATE backup_jobs SET finished_at=now(), status=$1, error_text=$2 WHERE id=$3',
+        ['FAILED', e.message || JSON.stringify(e), jobId]
+      );
       await pg.end();
-      return process.exit(1);
+      process.exit(1);
     }
 
-    // log chunk
-    await pg.query('INSERT INTO backup_job_chunks(job_id, chunk_index, ids, status, processed_at) VALUES($1,$2,$3,$4,now())', [jobId, offset / READ_BATCH, JSON.stringify(rows.map((r: any) => r.id)), 'INSERTED']);
+    // Log chunk for audit
+    await pg.query(
+      `INSERT INTO backup_job_chunks(job_id, chunk_index, ids, status, processed_at)
+       VALUES($1, $2, $3, 'UPSERTED', now())`,
+      [jobId, Math.floor(offset / READ_BATCH), JSON.stringify(rows.map(r => r.id))]
+    );
 
     offset += rows.length;
   }
 
-  // finalize
-  const cntRes = await pg.query('SELECT COUNT(1) as c FROM chat_message_archive WHERE backup_date=$1', [backupDate]);
-  localCount = Number(cntRes.rows[0].c || 0);
+  // Finalize job
+  await pg.query(
+    `UPDATE backup_jobs
+     SET finished_at = now(),
+         status = 'COMPLETED',
+         supabase_count = $1,
+         local_count = $1
+     WHERE id = $2`,
+    [totalProcessed, jobId]
+  );
 
-  await pg.query('UPDATE backup_jobs SET finished_at=now(), status=$1, supabase_count=$2, local_count=$3 WHERE id=$4', ['COMPLETED', supabaseCount, localCount, jobId]);
+  console.log(`[Backup] SUCCESS — ${totalProcessed} messages replicated to local "messages" table.`);
+  console.log('[Backup] Supabase old rows will be auto-deleted by its own H+3 cron (local keeps everything).');
 
-  console.log(`Backup completed: supabase=${supabaseCount} local=${localCount}`);
-
-  // verification
-  if (supabaseCount !== localCount) {
-    console.log('Mismatch counts, abort delete. Marking FAILED');
-    await pg.query('UPDATE backup_jobs SET status=$1 WHERE id=$2', ['FAILED_VERIFY', jobId]);
-    await pg.end();
-    return process.exit(1);
-  }
-
-  // Soft-delete in supabase (archived=true)
-  console.log('Starting soft-delete in Supabase by chunks...');
-  for (let i = 0; i < backedUpIds.length; i += DELETE_BATCH) {
-    const chunk = backedUpIds.slice(i, i + DELETE_BATCH);
-    const { error } = await supabase.from('messages').update({ archived: true }).in('id', chunk);
-    if (error) {
-      console.error('Supabase update archived error', error);
-      await pg.query('UPDATE backup_jobs SET status=$1, error_text=$2 WHERE id=$3', ['FAILED_DELETE', JSON.stringify(error), jobId]);
-      await pg.end();
-      return process.exit(1);
-    }
-    await pg.query('INSERT INTO backup_job_chunks(job_id, chunk_index, ids, status, processed_at) VALUES($1,$2,$3,$4,now())', [jobId, i / DELETE_BATCH, JSON.stringify(chunk), 'ARCHIVED']);
-    console.log(`Archived chunk ${i / DELETE_BATCH}`);
-  }
-
-  await pg.query('UPDATE backup_jobs SET status=$1 WHERE id=$2', ['VERIFIED_AND_ARCHIVED', jobId]);
-
-  console.log('All archived. Close PG.');
   await pg.end();
   process.exit(0);
 }
 
-run().catch((e) => {
-  console.error(e);
+run().catch(async (e) => {
+  console.error('[Backup] Fatal error:', e);
   process.exit(1);
 });

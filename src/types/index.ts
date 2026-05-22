@@ -4,6 +4,7 @@ export interface User {
   phone?: string;
   full_name: string;
   avatar_url?: string;
+  photo_url?: string;
   gender?: 'male' | 'female';
   birth_date?: string;
   is_email_verified: boolean;

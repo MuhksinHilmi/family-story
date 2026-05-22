@@ -1,14 +1,19 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { rootStyles } from '@/components/ui/design-system';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Users } from 'lucide-react';
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const joinFamilyUuid = searchParams.get('join');
+
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
@@ -22,10 +27,15 @@ export default function RegisterPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
+      const payload: any = { ...formData };
+      if (joinFamilyUuid) {
+        payload.family_uuid = joinFamilyUuid;
+      }
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (response.ok) {
@@ -42,79 +52,115 @@ export default function RegisterPage() {
   };
 
   return (
-    <>
-      <style>{rootStyles}</style>
-      <div className="min-h-screen flex items-center justify-center">
-      <Card className="w-full max-w-md lp-card">
-        <CardHeader className="card-header">
-          <CardTitle>Daftar</CardTitle>
-          <CardDescription>Buat akun Cerita Keluarga Anda</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <input
-                type="text"
-                placeholder="Nama Lengkap"
-                value={formData.full_name}
-                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                required
-                className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 ring-offset-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-            <div>
-              <input
-                type="email"
-                placeholder="Email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
-                className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 ring-offset-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-            <div>
-              <input
-                type="tel"
-                placeholder="Nomor Telepon (opsional)"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 ring-offset-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-            <div>
-              <select
-                value={formData.gender}
-                onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                required
-                className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">Jenis Kelamin</option>
-                <option value="male">Laki-laki</option>
-                <option value="female">Perempuan</option>
-              </select>
-            </div>
-            <div>
-              <input
-                type="date"
-                placeholder="Tanggal Lahir"
-                value={formData.birth_date}
-                onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-                required
-                className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 ring-offset-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Memproses...' : 'Daftar'}
-            </Button>
-          </form>
-          <div className="mt-4 text-center">
-            <Link href="/auth/login" className="text-sm text-blue-600 hover:underline">
-              Sudah punya akun? Masuk di sini
-            </Link>
+    <Card className="w-full max-w-md">
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-[#D6EAD9] flex items-center justify-center flex-shrink-0">
+            <Users className="h-5 w-5 text-[#4A7C59]" />
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <CardTitle className="text-[#3B2F1E]">Daftar</CardTitle>
+            <CardDescription>
+              {joinFamilyUuid
+                ? "Bergabung ke keluarga melalui link undangan."
+                : "Buat akun Cerita Keluarga Anda"}
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="full_name" className="text-sm font-medium text-[#3B2F1E]">Nama Lengkap</Label>
+            <Input
+              id="full_name"
+              type="text"
+              placeholder="Masukkan nama lengkap"
+              value={formData.full_name}
+              onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-sm font-medium text-[#3B2F1E]">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="nama@email.com"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="phone" className="text-sm font-medium text-[#3B2F1E]">Nomor Telepon <span className="text-[#9C8B75] font-normal">(opsional)</span></Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="08xxx-xxxx-xxxx"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="gender" className="text-sm font-medium text-[#3B2F1E]">Jenis Kelamin</Label>
+            <select
+              id="gender"
+              value={formData.gender}
+              onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+              required
+              className="flex h-10 w-full rounded-md border border-[#D4C4A8] bg-[#EDE4D3] px-3 py-2 text-base text-[#3B2F1E] ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A7C59] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="">Pilih jenis kelamin</option>
+              <option value="male">Laki-laki</option>
+              <option value="female">Perempuan</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="birth_date" className="text-sm font-medium text-[#3B2F1E]">Tanggal Lahir</Label>
+            <Input
+              id="birth_date"
+              type="date"
+              value={formData.birth_date}
+              onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+              required
+            />
+          </div>
+          <Button
+            type="submit"
+            className="w-full bg-[#4A7C59] hover:bg-[#2E5239] text-white font-medium"
+            disabled={isLoading}
+          >
+            {isLoading
+              ? 'Memproses...'
+              : joinFamilyUuid
+                ? 'Daftar & Bergabung ke Keluarga'
+                : 'Daftar'}
+          </Button>
+        </form>
+        <div className="mt-5 pt-4 border-t border-[#D4C4A8] text-center">
+          <Link href="/auth/login" className="text-sm text-[#4A7C59] hover:text-[#2E5239] hover:underline transition-colors">
+            Sudah punya akun? Masuk di sini
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F0E8]">
+      <Suspense fallback={
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Daftar</CardTitle>
+            <CardDescription>Memuat...</CardDescription>
+          </CardHeader>
+        </Card>
+      }>
+        <RegisterForm />
+      </Suspense>
     </div>
-    </>
   );
 }

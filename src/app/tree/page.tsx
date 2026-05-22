@@ -20,6 +20,7 @@ import {
   Link as LinkIcon,
   UserPlus,
   Scissors,
+  Share2,
 } from "lucide-react";
 import { FamilyNode } from "./components/FamilyNode";
 import { AddNodeModal } from "./components/AddNodeModal";
@@ -54,11 +55,12 @@ const [firstSelectedNodeId, setFirstSelectedNodeId] = useState<string | null>(
      deleteEdge,
      connectChild,
      reinviteNode,
-     savePosition,
-     loadTree,
-     loadUserNode,
-     familyId,
-   } = useFamilyTree();
+      savePosition,
+      loadTree,
+      loadUserNode,
+      familyId,
+      familyUuid,
+    } = useFamilyTree();
 
    useEffect(() => {
     if (user && !authLoading) {
@@ -252,6 +254,22 @@ const [firstSelectedNodeId, setFirstSelectedNodeId] = useState<string | null>(
     setFirstSelectedNodeId(null);
   }, []);
 
+  const handleShareJoinLink = useCallback(() => {
+    if (!familyUuid) {
+      alert("Link keluarga belum tersedia. Coba muat ulang halaman.");
+      return;
+    }
+    const link = `${window.location.origin}/auth/register?join=${familyUuid}`;
+    navigator.clipboard.writeText(link).then(() => {
+      alert("Link berhasil disalin!\n\n" +
+        "Kirim link ini ke anggota keluarga baru.\n" +
+        "Mereka akan bergabung ke keluarga ini saat mendaftar.");
+    }).catch(() => {
+      // fallback
+      prompt("Salin link ini:", link);
+    });
+  }, [familyUuid]);
+
   const handleInviteMember = useCallback(
     (email: string, fullName: string, gender: 'male' | 'female', phone?: string) => {
       if (!familyId) return;
@@ -307,46 +325,67 @@ const [firstSelectedNodeId, setFirstSelectedNodeId] = useState<string | null>(
   );
 
   return (
-    <div className="h-[calc(100vh-120px)]">
-      <Card className="h-full">
+    <div className="h-[calc(100vh-120px)] bg-[#EDE4D3]">
+      <Card className="h-full bg-[#FDFAF5] border border-[#D4C4A8]">
         <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <CardTitle className="text-base sm:text-lg">Pohon Keluarga</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={() => openModal()}
-            >
-              <UserPlus className="h-4 w-4 mr-1" />
-              <span className="hidden xs:inline">Tambah Anggota</span>
-            </Button>
-            <Button
-              size="sm"
-              variant={mode === "spouse" ? "default" : "outline"}
-              onClick={() => setMode(mode === "spouse" ? "default" : "spouse")}
-            >
-              <LinkIcon className="h-4 w-4 mr-1" />
-              <span className="hidden xs:inline">Pasangan</span>
-            </Button>
-            <Button
-              size="sm"
-              variant={mode === "child" ? "default" : "outline"}
-              onClick={() => setMode(mode === "child" ? "default" : "child")}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              <span className="hidden xs:inline">Anak</span>
-            </Button>
-            <Button
-              size="sm"
-              variant={mode === "deleteEdge" ? "destructive" : "outline"}
-              onClick={() =>
-                setMode(mode === "deleteEdge" ? "default" : "deleteEdge")
-              }
-            >
-              <Scissors className="h-4 w-4 mr-1" />
-              <span className="hidden xs:inline">Hapus Garis</span>
-            </Button>
-          </div>
+          <CardTitle className="text-base sm:text-lg text-[#3B2F1E]">Pohon Keluarga</CardTitle>
+           <div className="flex flex-wrap items-center gap-2">
+             {/* === Group 1: Add / Join Family === */}
+             <div className="flex gap-2">
+               <Button 
+                 size="sm" 
+                 variant="outline" 
+                 onClick={() => openModal()}
+               >
+                 <UserPlus className="h-4 w-4 mr-1" />
+                 <span className="hidden xs:inline">Tambah Anggota</span>
+               </Button>
+
+               <Button
+                 size="sm"
+                 variant="outline"
+                 onClick={handleShareJoinLink}
+                 disabled={!familyUuid}
+                 title={familyUuid ? "Bagikan link untuk anggota baru bergabung ke keluarga ini" : "Memuat data keluarga..."}
+               >
+                 <Share2 className="h-4 w-4 mr-1" />
+                 <span className="hidden xs:inline">Bagikan Link</span>
+               </Button>
+             </div>
+
+             {/* Visual separator between "add" actions and "edit structure" actions */}
+             <div className="hidden sm:block h-6 w-px bg-[#D4C4A8] mx-1" />
+
+             {/* === Group 2: Edit Tree Structure (modes) === */}
+             <div className="flex gap-2">
+               <Button
+                 size="sm"
+                 variant={mode === "spouse" ? "default" : "outline"}
+                 onClick={() => setMode(mode === "spouse" ? "default" : "spouse")}
+               >
+                 <LinkIcon className="h-4 w-4 mr-1" />
+                 <span className="hidden xs:inline">Pasangan</span>
+               </Button>
+               <Button
+                 size="sm"
+                 variant={mode === "child" ? "default" : "outline"}
+                 onClick={() => setMode(mode === "child" ? "default" : "child")}
+               >
+                 <Plus className="h-4 w-4 mr-1" />
+                 <span className="hidden xs:inline">Anak</span>
+               </Button>
+               <Button
+                 size="sm"
+                 variant={mode === "deleteEdge" ? "destructive" : "outline"}
+                 onClick={() =>
+                   setMode(mode === "deleteEdge" ? "default" : "deleteEdge")
+                 }
+               >
+                 <Scissors className="h-4 w-4 mr-1" />
+                 <span className="hidden xs:inline">Hapus Garis</span>
+               </Button>
+             </div>
+           </div>
         </CardHeader>
         <CardContent className="h-full p-0">
           <div className="h-full w-full">

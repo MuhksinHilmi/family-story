@@ -179,24 +179,24 @@ export function NodeDetailModal({
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xl font-bold">
+                <div className="w-full h-full bg-[#D6EAD9] flex items-center justify-center text-xl font-bold text-[#2E5239]">
                   {node.full_name.charAt(0)}
                 </div>
               )}
             </div>
             <div>
-              <h3 className="font-semibold text-lg">{node.full_name}</h3>
+              <h3 className="font-semibold text-lg text-[#3B2F1E]">{node.full_name}</h3>
               {node.nasab_line && (
-                <h4 className="text-sm text-blue-500">{node.nasab_line}</h4>
+                <h4 className="text-sm text-[#8B6F47]">{node.nasab_line}</h4>
               )}
               {fatherName && !node.nasab_line && (
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-[#6B5B45]">
                   {node.gender === "male"
                     ? `Bin ${fatherName}`
                     : `Binti ${fatherName}`}
                 </div>
               )}
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-[#9C8B75]">
                 {isPending ? "Menunggu konfirmasi" : "Anggota aktif"}
               </p>
             </div>
@@ -205,143 +205,117 @@ export function NodeDetailModal({
           <div className="space-y-3">
             {node.invitation_email && (
               <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-gray-500" />
+                <Mail className="h-4 w-4 text-[#9C8B75]" />
                 <span className="text-sm">{node.invitation_email}</span>
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-gray-500" />
-              <span className="text-sm">
-                {node.gender === "male" ? "Laki-laki" : "Perempuan"}
-              </span>
-            </div>
+            {hasFather && (
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-[#9C8B75]" />
+                <span className="text-sm">Ayah: {fatherName}</span>
+              </div>
+            )}
             {hasMother && (
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-gray-500" />
+                <User className="h-4 w-4 text-[#9C8B75]" />
                 <span className="text-sm">Ibu kandung: {motherName}</span>
               </div>
             )}
             {node.birth_date && (
               <div className="flex items-center gap-2">
-                <Cake className="h-4 w-4 text-gray-500" />
+                <Calendar className="h-4 w-4 text-[#9C8B75]" />
+                <span className="text-sm">Lahir: {node.birth_date}</span>
+              </div>
+            )}
+            {spouseName && (
+              <div className="flex items-center gap-2">
+                <Heart className="h-4 w-4 text-[#9C8B75]" />
                 <span className="text-sm">
-                  {new Date(node.birth_date).toLocaleDateString("id-ID")}
+                  {isHusband ? "Istri" : "Suami"}: {spouseName}
                 </span>
               </div>
             )}
-          </div>
-
-          <div className="space-y-2">
-            {isWife && (
-              <div className="flex items-center gap-2">
-                <Heart className="h-4 w-4 text-gray-500" />
-                <span className="text-sm">Suami: {spouseName}</span>
-              </div>
-            )}
-            {isHusband && (
-              <div className="flex items-center gap-2">
-                <Heart className="h-4 w-4 text-gray-500" />
-                <span className="text-sm">Istri: {spouseName}</span>
-              </div>
-            )}
-          </div>
-
-          {hasChildren && children.length > 0 && (
-            <div className="space-y-1">
-              {children.map((child, index) => {
-                const childFatherName = child.father_id
-                  ? getNodeName(child.father_id)
-                  : null;
-                const childMotherName = child.mother_id
-                  ? getNodeName(child.mother_id)
-                  : null;
-                const nasab = childFatherName
-                  ? child.gender === "male"
-                    ? `Bin ${childFatherName}`
-                    : `Binti ${childFatherName}`
-                  : null;
-                return (
-                  <div
-                    key={child.id}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <Users className="h-4 w-4 text-gray-500" />
-                    <span>
+            {hasChildren && (
+              <div className="flex items-start gap-2">
+                <Users className="h-4 w-4 text-[#9C8B75] mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  {children.map((child, index) => (
+                    <span key={child.id} className="text-sm">
                       Anak {index + 1}: {child.name}
                       <span
-                        className={`${child.gender === "male" ? "text-blue-800" : "text-pink-800"} inline-block ml-2`}
+                        className={`${child.gender === "male" ? "text-[#4A7C59]" : "text-[#8B6F47]"} inline-block ml-2`}
                       >
                         {child.gender === "male" ? "♂" : "♀"}
                       </span>
                     </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  ))}
+                </div>
+              </div>
+            )}
 
-          {siblings.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-gray-500" />
-              <span className="text-sm">
-                Saudara kandung: {siblings.join(", ")}
-              </span>
-            </div>
-          )}
+            {siblings.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-[#9C8B75]" />
+                <span className="text-sm">
+                  Saudara kandung: {siblings.join(", ")}
+                </span>
+              </div>
+            )}
 
-          {isPending && (
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-              <p className="text-sm text-orange-700">
-                Undangan belum diterima. Klik tombol di bawah untuk mengirim
-                ulang undangan.
-              </p>
+            {isPending && (
+              <div className="bg-[#F5E8C8] border border-[#D4C4A8] rounded-lg p-3">
+                <p className="text-sm text-[#9C8B75]">
+                  Undangan belum diterima. Klik tombol di bawah untuk mengirim
+                  ulang undangan.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Tutup
+            </Button>
+            {isPending && (
+              <Button onClick={handleReinvite} disabled={isReinviting}>
+                <Send className="h-4 w-4 mr-1" />
+                {isReinviting ? "Mengirim..." : "Kirim Ulang Undangan"}
+              </Button>
+            )}
+            {canDelete && !showConfirm && (
+              <Button variant="destructive" onClick={() => setShowConfirm(true)}>
+                <Trash2 className="h-4 w-4 mr-1" />
+                Hapus Anggota
+              </Button>
+            )}
+          </DialogFooter>
+
+          {showConfirm && (
+            <div className="border-t pt-4">
+              <Label className="text-sm font-medium">
+                Ketik "HAPUS" untuk konfirmasi
+              </Label>
+              <Input
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="HAPUS"
+                className="mt-2"
+              />
+              <div className="flex gap-2 mt-3">
+                <Button variant="outline" onClick={() => setShowConfirm(false)}>
+                  Batal
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={confirmText !== "HAPUS"}
+                >
+                  Ya, Hapus
+                </Button>
+              </div>
             </div>
           )}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Tutup
-          </Button>
-          {isPending && (
-            <Button onClick={handleReinvite} disabled={isReinviting}>
-              <Send className="h-4 w-4 mr-1" />
-              {isReinviting ? "Mengirim..." : "Kirim Ulang Undangan"}
-            </Button>
-          )}
-          {canDelete && !showConfirm && (
-            <Button variant="destructive" onClick={() => setShowConfirm(true)}>
-              <Trash2 className="h-4 w-4 mr-1" />
-              Hapus Anggota
-            </Button>
-          )}
-        </DialogFooter>
-
-        {showConfirm && (
-          <div className="border-t pt-4">
-            <Label className="text-sm font-medium">
-              Ketik "HAPUS" untuk konfirmasi
-            </Label>
-            <Input
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="HAPUS"
-              className="mt-2"
-            />
-            <div className="flex gap-2 mt-3">
-              <Button variant="outline" onClick={() => setShowConfirm(false)}>
-                Batal
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={confirmText !== "HAPUS"}
-              >
-                Ya, Hapus
-              </Button>
-            </div>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   );

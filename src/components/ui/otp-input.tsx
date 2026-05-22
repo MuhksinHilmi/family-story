@@ -64,11 +64,11 @@ const OtpInput = React.forwardRef<HTMLDivElement, OtpInputProps>(
             onKeyDown={(e) => handleKeyDown(index, e)}
             onPaste={handlePaste}
             disabled={disabled}
-            className={cn(
-              'h-12 w-12 rounded-md border border-gray-300 bg-white text-center text-2xl font-semibold text-gray-900',
-              'focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
-              'disabled:cursor-not-allowed disabled:opacity-50'
-            )}
+className={cn(
+               'h-12 w-12 rounded-md border border-[#D4C4A8] bg-[#EDE4D3] text-center text-2xl font-semibold text-[#3B2F1E]',
+               'focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+               'disabled:cursor-not-allowed disabled:opacity-50'
+             )}
           />
         ))}
       </div>

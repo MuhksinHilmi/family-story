@@ -50,18 +50,23 @@ export default function InvitationPage() {
     fetchInv();
   }, [params.token]);
 
-const acceptAsLoggedIn = async () => {
+  const acceptAsLoggedIn = async () => {
     if (!user) return;
     setIsSubmitting(true);
     try {
       const res = await fetch(`/api/invitations/${params.token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id, full_name: user.full_name, gender: user.gender, birth_date: user.birth_date }),
+        body: JSON.stringify({
+          user_id: user.id,
+          full_name: user.full_name,
+          gender: user.gender,
+          birth_date: user.birth_date,
+        }),
       });
       if (res.ok) {
         localStorage.setItem("token", `token-${user.id}-${Date.now()}`);
-        window.location.href = "/dashboard";
+        window.location.href = "/feeds";
       } else {
         const data = await res.json();
         setError(data.error || "Gagal menerima undangan");
@@ -114,29 +119,29 @@ const acceptAsLoggedIn = async () => {
     );
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F0E8]">
+      <Card className="w-full max-w-md bg-[#FDFAF5] border border-[#D4C4A8]">
         <CardHeader>
           <CardTitle>Undangan Bergabung</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <p className="text-red-600">{error}</p>}
-          {inv ? (
+          {inv && user ? (
             <div>
               <p>
-                Anda diundang untuk bergabung ke keluarga ID:{" "}
-                <strong>{inv.family_id}</strong>
+                Anda diundang untuk bergabung oleh:{" "}
+                <strong>{user.full_name}</strong>
               </p>
               {inv.node && (
                 <p>
-                  Posisi: <strong>{inv.node.full_name}</strong>
+                  atas nama: <strong>{inv.node.full_name}</strong>
                 </p>
               )}
 
               {user ? (
                 <div className="mt-4">
                   <p>
-                    Masuk sebagai:{" "}
+                    Masuk sebagai keluarga dari:{" "}
                     <strong>
                       {user.full_name} ({user.email})
                     </strong>

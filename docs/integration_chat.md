@@ -1,10 +1,41 @@
-PRD Lengkap — Chat Keluarga (Realtime Supabase) + Local Sync Harian (1 Dump) + Retensi H+3
-Status
-Final (berdasarkan pilihan kamu):
+PRD Lengkap — Chat Keluarga (Realtime Supabase) + Local Sync Harian + Retensi H+3
 
-UI ambil 50 “lama” yang relatif ke scroll anchor (bukan 50 terlama global).
-Local sync 1 dump dan meng-upsert tanpa delete.
-Supabase tetap menghapus data lama H+3; local tidak menghapus sehingga history tetap tampil.
+## 2026 Final Architecture (Sudah Diimplementasikan)
+
+**Local Postgres = Single Source of Truth (Permanent)**
+- Tabel `messages` (bukan lagi `chat_message_archive`)
+- Tabel `user_room_reads` (per-user last read cursor + unread_count)
+- Semua history, unread badge, dan mark-read ada di sini
+
+**Supabase `messages` = Transient Realtime Bus Only**
+- Hanya untuk Broadcast (trigger) + delivery cepat
+- Hard delete otomatis setelah ~3 hari (via cron / pg_cron)
+- Tidak lagi menjadi sumber history
+
+**Send Flow (Local-First)**
+1. Tulis ke local `messages` (langsung aman)
+2. Tulis ke Supabase (untuk trigger realtime)
+3. Client lain terima via Broadcast
+
+**Load Flow di UI**
+- Pertama buka / refresh room → ambil 50 pesan **terbaru** dari local DB (`?latest=true`)
+- Realtime Broadcast menambahkan pesan baru di bawah
+- "Muat pesan sebelumnya" tetap pakai cursor `before` ke local DB
+
+**Room Identification**
+- Tidak ada kolom `room_id` lagi di tabel `messages`
+- Room diidentifikasi oleh: `family_uuid` + `scope_type` + `small_family_id` (users.uuid ayah)
+
+**Unread / Read**
+- `user_room_reads` (user_id + room_id) menyimpan `last_read_message_id` + `unread_count`
+- `/api/chat/rooms` mengembalikan `unread_count` per room
+- `POST /api/chat/mark-read` untuk update cursor
+
+Status: Final & Sudah Berjalan (Mei 2026)
+
+---
+
+## PRD Asli (untuk referensi sejarah)
 1) Ringkasan Produk
 Aplikasi chat untuk keluarga menggunakan:
 
@@ -256,8 +287,17 @@ load local batch 50 (relatif anchor)
 load supabase batch 50 (>= cutoff)
 subscribe realtime dan dedupe by id
 
-16) Implemented Endpoints
-- GET /api/chat/archive - fetch archive messages with anchor pagination
-- GET /api/chat/realtime - fetch recent messages from Supabase
-- POST /api/chat/send - send message to Supabase
-- GET /api/family/members - get user's family membership
+16) Implemented Endpoints (2026 Final)
+
+- GET  /api/chat/rooms               → daftar room + unread_count per user
+- GET  /api/chat/archive?room_id=...&latest=true → 50 pesan terbaru dari local DB
+- GET  /api/chat/archive?room_id=...&before=...  → pesan lebih lama (pagination ke atas)
+- POST /api/chat/send                → dual-write: local `messages` + Supabase (realtime)
+- POST /api/chat/mark-read           → update last_read_message_id + reset unread_count
+- GET  /api/chat/realtime            → (opsional) fetch recent dari Supabase langsung
+- GET  /api/family/members
+
+Catatan:
+- Tidak ada lagi `room_id` di messages table.
+- Local `messages` adalah sumber truth permanen.
+- Supabase hanya untuk broadcast.
