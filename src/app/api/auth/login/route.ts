@@ -64,17 +64,20 @@ const result = await pool.query(
        [user.id]
      );
 
-     // Issue real JWT with UUID as sub for Supabase RLS compatibility
-     const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-     const token = await new SignJWT({ 
-       sub: user.uuid,  // UUID for auth.uid() compatibility with Supabase RLS
-       email: user.email,
-       full_name: user.full_name 
-     })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime('7d')
-      .sign(secret);
+// Issue real JWT with proper Supabase claims for Realtime RLS (private channels)
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+      const token = await new SignJWT({ 
+        aud: 'authenticated',
+        role: 'authenticated',
+        sub: user.uuid,              // UUID → auth.uid() in RLS
+        email: user.email,
+        full_name: user.full_name,
+        is_anonymous: false
+      })
+       .setProtectedHeader({ alg: 'HS256' })
+       .setIssuedAt()
+       .setExpirationTime('7d')
+       .sign(secret);
 
     return NextResponse.json({
       message: 'Berhasil masuk',

@@ -9,12 +9,12 @@
 import pool from "./db";
 
 export interface ChatRoom {
-  id: string;                          // internal PK (UUID of the chat_rooms row)
-  family_id: number;                   // legacy integer family id (used only for membership checks)
-  family_uuid: string;                 // stable UUID of the family — primary logical identifier for chat
+  id: string; // internal PK (UUID of the chat_rooms row)
+  family_id: number; // legacy integer family id (used only for membership checks)
+  family_uuid: string; // stable UUID of the family — primary logical identifier for chat
   scope_type: "general" | "small";
-  small_family_id?: number | null;     // DEPRECATED (old integer father node id)
-  small_family_uuid?: string | null;   // UUID of the husband/father (from users.uuid). This is now the main identifier for small rooms.
+  small_family_id?: number | null; // DEPRECATED (old integer father node id)
+  small_family_uuid?: string | null; // UUID of the husband/father (from users.uuid). This is now the main identifier for small rooms.
   name?: string;
 }
 export async function getChatRoomById(
@@ -49,7 +49,7 @@ export async function getOrCreateGeneralRoom(
   familyUuid: string,
   familyName?: string | null,
 ): Promise<ChatRoom> {
-  const roomName = `Keluarga Besar ${familyName || 'Keluarga'}`;
+  const roomName = `Keluarga Besar`;
 
   const result = await pool.query(
     `INSERT INTO chat_rooms (family_id, family_uuid, scope_type, name, created_at, updated_at)
@@ -59,7 +59,7 @@ export async function getOrCreateGeneralRoom(
        name = EXCLUDED.name,
        updated_at = NOW()
      RETURNING id, family_id, family_uuid, scope_type, small_family_id, small_family_uuid, name`,
-    [familyId, familyUuid, roomName]
+    [familyId, familyUuid, roomName],
   );
 
   return result.rows[0];
@@ -77,10 +77,10 @@ export async function getOrCreateGeneralRoom(
 export async function getOrCreateSmallRoom(
   familyId: number,
   familyUuid: string,
-  husbandUserUuid: string,           // UUID of the husband/father (from users.uuid)
-  husbandName?: string,              // optional for room name
+  husbandUserUuid: string, // UUID of the husband/father (from users.uuid)
+  husbandName?: string, // optional for room name
 ): Promise<ChatRoom> {
-  const roomName = `Keluarga ${husbandName || 'Inti'}`;
+  const roomName = `Keluarga ${husbandName || "Inti"}`;
 
   const result = await pool.query(
     `INSERT INTO chat_rooms (family_id, family_uuid, scope_type, small_family_uuid, name, created_at, updated_at)
@@ -90,7 +90,7 @@ export async function getOrCreateSmallRoom(
        name = EXCLUDED.name,
        updated_at = NOW()
      RETURNING id, family_id, family_uuid, scope_type, small_family_id, small_family_uuid, name`,
-    [familyId, familyUuid, husbandUserUuid, roomName]
+    [familyId, familyUuid, husbandUserUuid, roomName],
   );
 
   return result.rows[0];
@@ -109,7 +109,7 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
      FROM family_members fm
      JOIN families f ON f.id = fm.family_id
      WHERE fm.user_id = $1`,
-    [userId]
+    [userId],
   );
 
   const rooms: ChatRoom[] = [];
@@ -120,7 +120,11 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
     const familyName = fam.family_name;
 
     // 1. General room for the whole family (always exists)
-    const generalRoom = await getOrCreateGeneralRoom(familyId, familyUuid, familyName);
+    const generalRoom = await getOrCreateGeneralRoom(
+      familyId,
+      familyUuid,
+      familyName,
+    );
     rooms.push(generalRoom);
 
     // 2. Small rooms (Keluarga Inti)
@@ -138,7 +142,7 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
           WHERE sr.node_a = fn.id OR sr.node_b = fn.id
         )
       `,
-      [familyId]
+      [familyId],
     );
 
     for (const husband of husbandsResult.rows) {
@@ -146,7 +150,7 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
         familyId,
         familyUuid,
         husband.husband_uuid,
-        husband.full_name
+        husband.full_name,
       );
       rooms.push(smallRoom);
     }

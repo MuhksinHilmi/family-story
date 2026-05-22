@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     const senderName = userRes.rows[0]?.full_name || 'Unknown User';
     const senderPhoto = userRes.rows[0]?.photo_url || null;
 
-    // 3. Insert into Supabase messages (only for realtime + short retention)
+// 3. Insert into Supabase messages (only for realtime + short retention)
     const { data, error } = await supabase
       .from('messages')
       .insert({

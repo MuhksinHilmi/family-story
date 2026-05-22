@@ -31,22 +31,25 @@ export async function POST(request: NextRequest) {
 
       // Auto-create user from invitation if not exists
       const userResult = await client.query(
-        'SELECT id, full_name, email FROM users WHERE email = $1',
+        'SELECT id, uuid, full_name, email FROM users WHERE email = $1',
         [invitation.email]
       );
 
       let userId: number;
+      let userUuid: string;
       if (userResult.rows.length > 0) {
         userId = userResult.rows[0].id;
+        userUuid = userResult.rows[0].uuid;
       } else {
         // Create new user with email from invitation
         const fullName = invitation.full_name || invitation.email.split('@')[0];
         const createUserRes = await client.query(
           `INSERT INTO users (full_name, email, gender, is_email_verified, is_phone_verified, created_at, updated_at)
-           VALUES ($1, $2, $3, true, false, NOW(), NOW()) RETURNING id`,
+           VALUES ($1, $2, $3, true, false, NOW(), NOW()) RETURNING id, uuid`,
           [fullName, invitation.email, invitation.gender || 'male']
         );
         userId = createUserRes.rows[0].id;
+        userUuid = createUserRes.rows[0].uuid;
       }
 
       // Update family_nodes to link user
@@ -67,11 +70,14 @@ export async function POST(request: NextRequest) {
       // Mark invitation accepted
       await client.query(`UPDATE invitations SET status = 'accepted' WHERE token = $1`, [token]);
 
-      // Issue real JWT
+      // Issue real JWT with proper Supabase claims for Realtime private channels
       const secret = new TextEncoder().encode(process.env.JWT_SECRET);
       const jwtToken = await new SignJWT({ 
-        sub: userId.toString(),
-        email: invitation.email 
+        aud: 'authenticated',
+        role: 'authenticated',
+        sub: userUuid,               // UUID (not integer id) for auth.uid() + family_members.user_id
+        email: invitation.email,
+        is_anonymous: false
       })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()

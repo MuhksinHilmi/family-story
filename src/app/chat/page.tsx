@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Users, Home } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { createClient } from '@supabase/supabase-js';
 import { ChatMessage, User } from "@/types";
 import { getAuthHeaders } from "@/lib/api-client";
 import { useAuth } from "@/context/auth-context";
@@ -42,19 +42,35 @@ export default function ChatPage() {
     }
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     if (!user?.id) return;
     fetchChatRooms();
   }, [user?.id]);
 
   useEffect(() => {
-    if (!currentRoom) return;
+    if (!currentRoom || !user?.id) return;
 
     loadInitialMessages();
 
-    const supabase = getSupabaseClient();
+    const token = localStorage.getItem("token");
+    if (!token) {
+      console.warn("No auth token, realtime disabled");
+      return;
+    }
 
-    // Build correct topic based on scope_type
+    // Create Supabase client with custom JWT for private Realtime channels (RLS)
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        accessToken: async () => localStorage.getItem("token") || "",
+      }
+    );
+
+    // Explicitly set the token for Realtime (helps with private channels + custom JWT)
+    supabase.realtime.setAuth(token);
+
+    // Build correct topic based on scope_type (must match DB trigger exactly)
     const smallId =
       currentRoom.small_family_uuid || currentRoom.small_family_id;
     const topic =
@@ -63,7 +79,7 @@ export default function ChatPage() {
         : `family:${currentRoom.family_uuid}:small:${smallId}`;
 
     const channel = supabase
-      .channel(topic, { config: { private: false } })
+      .channel(topic, { config: { private: true } })   // ← must be private to match realtime.send(..., true)
       .on("broadcast", { event: "message_created" }, (payload) => {
         const msg = payload.payload as any;
         if (!msg?.id || seenIdsRef.current.has(msg.id)) return;
@@ -79,22 +95,29 @@ export default function ChatPage() {
           type: "text",
           created_at: msg.created_at,
         };
-        setMessages((prev) => [...prev, chatMsg]);
+        setMessages((prev) => {
+          // Drop any still-pending optimistic temps now that we have the real message
+          const withoutPending = prev.filter((m) => !String(m.id).startsWith("temp-"));
+          return [...withoutPending, chatMsg];
+        });
       })
       .subscribe((status, err) => {
+        console.log(`[Realtime] ${topic} → status: ${status}`);
         if (status === "SUBSCRIBED") {
-          console.log("Realtime connected to", topic);
-          // supabase.realtime.setAuth();
-          const token = localStorage.getItem("token");
-          supabase.realtime.setAuth(token);
+          console.log(`[Realtime] Successfully subscribed to ${topic}`);
         }
-        if (err) console.error("Realtime subscribe error:", err);
+        if (status === "CLOSED") {
+          console.warn(`[Realtime] Channel CLOSED for ${topic}. This usually means JWT lacks 'role: authenticated' or RLS on realtime.messages denied access.`);
+        }
+        if (err) {
+          console.error(`[Realtime] Error on ${topic}:`, err);
+        }
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentRoom]);
+  }, [currentRoom, user?.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -262,7 +285,7 @@ export default function ChatPage() {
   };
 
   const handleSend = async () => {
-    if (!message.trim() || !currentRoom) return;
+    if (!message.trim() || !currentRoom || !(user as any)?.uuid) return;
 
     const contentToSend = message.trim();
     const roomIdToUse = currentRoom.id;
@@ -271,7 +294,7 @@ export default function ChatPage() {
     const tempMsg: ChatMessage = {
       id: tempId,
       room_id: roomIdToUse,
-      sender_id: user?.id || "current-user",
+      sender_id: (user as any)?.uuid || "current-user",
       content: contentToSend,
       type: "text",
       created_at: new Date().toISOString(),
@@ -289,7 +312,26 @@ export default function ChatPage() {
         }),
       });
 
-      if (!res.ok) {
+      if (res.ok) {
+        const real = await res.json();
+        const realMsg: ChatMessage = {
+          id: real.id,
+          room_id: real.room_id ?? roomIdToUse,
+          sender_id: real.sender_id,
+          sender_name: real.sender_name_snapshot || null,
+          sender_photo: real.sender_photo_snapshot || null,
+          content: real.body,
+          type: "text",
+          created_at: real.created_at,
+        };
+
+        seenIdsRef.current.add(real.id);
+
+        // Replace optimistic temp message with authoritative server record
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? realMsg : m))
+        );
+      } else {
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
         const errText = await res.text();
         console.error("Send failed:", res.status, errText);
@@ -308,8 +350,8 @@ export default function ChatPage() {
 
   if (!currentRoom) {
     return (
-      <div className="flex flex-col h-[600px]">
-      <Card className="flex-1 flex flex-col min-h-0">
+      <div className="flex flex-col h-screen">
+        <Card className="flex-1 flex flex-col min-h-0">
           <CardHeader>
             <CardTitle>Chat Keluarga</CardTitle>
           </CardHeader>
@@ -324,9 +366,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[600px]">
-      <Card className="flex-1 flex flex-col">
-        <CardHeader className="pb-3">
+    <div className="flex flex-col h-[100%]">
+      <Card className="flex-1 flex flex-col min-h-0">
+        <CardHeader className="pb-3 flex-shrink-0">
           <CardTitle className="text-xl">Chat Keluarga</CardTitle>
           {currentRoom && (
             <p className="text-xs text-gray-500 -mt-1 truncate">
@@ -335,8 +377,7 @@ export default function ChatPage() {
           )}
         </CardHeader>
         <CardContent className="flex-1 flex p-0 min-h-0">
-          {/* Vertical Room List (sidebar style) - attractive + clear active state */}
-          <div className="w-56 border-r bg-gray-50 flex flex-col">
+          <div className="w-56 border-r bg-gray-50 flex flex-col flex-shrink-0">
             <div className="px-3 pt-3 pb-2">
               <div className="text-[10px] font-semibold tracking-[1px] text-gray-500">
                 RUANG CHAT
@@ -352,7 +393,6 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {/* General (Keluarga Besar) */}
               {rooms
                 .filter((r) => r.scope_type === "general")
                 .map((room) => {
@@ -379,7 +419,6 @@ export default function ChatPage() {
                   );
                 })}
 
-              {/* Small / Nuclear families section */}
               {rooms.some((r) => r.scope_type === "small") && (
                 <div className="text-[10px] font-medium tracking-widest text-emerald-600/70 mt-3 mb-1 px-1">
                   KELUARGA INTI
@@ -413,41 +452,41 @@ export default function ChatPage() {
             </div>
           </div>
 
-           {/* Chat Area */}
-           <div className="flex-1 flex flex-col p-4 min-h-0">
-            {/* Attractive current room header */}
-            {currentRoom && (
-              <div className="flex items-center gap-3 pb-3 mb-3 border-b">
-                {currentRoom.scope_type === "general" ? (
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-                    <Users className="h-5 w-5 text-primary" />
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex items-center gap-3 pb-3 mb-3 border-b flex-shrink-0">
+              {currentRoom && (
+                <>
+                  {currentRoom.scope_type === "general" ? (
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+                      <Users className="h-5 w-5 text-primary" />
+                    </div>
+                  ) : (
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
+                      <Home className="h-5 w-5 text-emerald-600" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-base truncate">
+                      {currentRoom.name}
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      {currentRoom.scope_type === "general"
+                        ? "Keluarga besar • Semua anggota"
+                        : "Keluarga inti • Hanya ayah + istri + anak"}
+                    </div>
                   </div>
-                ) : (
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
-                    <Home className="h-5 w-5 text-emerald-600" />
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-base truncate">
-                    {currentRoom.name}
-                  </div>
-                  <div className="text-[11px] text-gray-500">
-                    {currentRoom.scope_type === "general"
-                      ? "Keluarga besar • Semua anggota"
-                      : "Keluarga inti • Hanya ayah + istri + anak"}
-                  </div>
-                </div>
-              </div>
-            )}
+                </>
+              )}
+            </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1" style={{ maxHeight: "60vh" }}>
               {loading ? (
                 <div className="text-center py-8">Memuat pesan...</div>
               ) : messages.length === 0 ? (
                 <div className="text-center py-8">Belum ada pesan</div>
               ) : (
                 messages.map((msg) => {
-                  const isMine = msg.sender_id === user?.id;
+                  const isMine = msg.sender_id === (user as any)?.uuid;
                   return (
                     <div
                       key={msg.id}
