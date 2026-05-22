@@ -12,6 +12,9 @@ import {
   Plus,
   RefreshCw,
   Lock,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api-client";
@@ -49,6 +52,9 @@ export default function FeedsPage() {
   const [newFeedsCount, setNewFeedsCount] = useState(0);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Image preview modal state
+  const [preview, setPreview] = useState<{ feed: Feed; index: number } | null>(null);
 
   const { user } = useAuth();
   const firstName = user?.full_name?.split(" ")[0] || "Kamu";
@@ -228,6 +234,40 @@ export default function FeedsPage() {
     }
   };
 
+  // Image preview helpers
+  const openPreview = (feed: Feed, index: number) => {
+    setPreview({ feed, index });
+  };
+
+  const closePreview = () => {
+    setPreview(null);
+  };
+
+  const goPrev = () => {
+    if (!preview || preview.feed.media.length === 0) return;
+    const newIndex =
+      (preview.index - 1 + preview.feed.media.length) % preview.feed.media.length;
+    setPreview({ ...preview, index: newIndex });
+  };
+
+  const goNext = () => {
+    if (!preview || preview.feed.media.length === 0) return;
+    const newIndex = (preview.index + 1) % preview.feed.media.length;
+    setPreview({ ...preview, index: newIndex });
+  };
+
+  // Keyboard support for preview modal
+  useEffect(() => {
+    if (!preview) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closePreview();
+      if (e.key === "ArrowLeft") goPrev();
+      if (e.key === "ArrowRight") goNext();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [preview]);
+
   // New scope icon (replaces getScopeLabel + getScopeColor)
   const getScopeIcon = (feed: Feed) => {
     if (feed.scope_type === "small") {
@@ -250,15 +290,24 @@ export default function FeedsPage() {
     );
   };
 
-  // Updated renderMedia (no borders, no rounded on wrappers, relative grid for +N)
-  const renderMedia = (media: Feed["media"]) => {
+  // Updated renderMedia (clickable for elegant preview, no borders, relative grid for +N)
+  const renderMedia = (
+    media: Feed["media"],
+    onImageClick?: (index: number) => void,
+  ) => {
     if (!media || media.length === 0) return null;
 
     const count = media.length;
+    const handleClick = onImageClick
+      ? (idx: number) => onImageClick(idx)
+      : undefined;
 
     if (count === 1) {
       return (
-        <div>
+        <div
+          className={onImageClick ? "cursor-pointer" : ""}
+          onClick={handleClick ? () => handleClick(0) : undefined}
+        >
           <img
             src={media[0].media_url}
             alt="feed media"
@@ -271,7 +320,11 @@ export default function FeedsPage() {
     return (
       <div className="grid grid-cols-2 gap-0.5 relative">
         {media.slice(0, 4).map((m, idx) => (
-          <div key={idx} className="aspect-square">
+          <div
+            key={idx}
+            className={`aspect-square ${onImageClick ? "cursor-pointer" : ""}`}
+            onClick={handleClick ? () => handleClick(idx) : undefined}
+          >
             <img
               src={m.media_url}
               alt={`media-${idx}`}
@@ -280,7 +333,7 @@ export default function FeedsPage() {
           </div>
         ))}
         {count > 4 && (
-          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
+          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded pointer-events-none">
             +{count - 4} foto
           </div>
         )}
@@ -427,7 +480,7 @@ export default function FeedsPage() {
                 {/* Media area — full width, no border, no padding */}
                 <div className="relative">
                   {/* Media */}
-                  {renderMedia(feed.media)}
+                  {renderMedia(feed.media, (idx) => openPreview(feed, idx))}
 
                   {/* Overlay: gradient at the top for legibility (stronger for bright images) */}
                   {feed.media && feed.media.length > 0 && (
@@ -565,6 +618,78 @@ export default function FeedsPage() {
           <p className="text-center text-xs text-[#9C8B75] py-6">
             — Semua feed sudah dimuat —
           </p>
+        )}
+
+        {/* Elegant Image Preview Modal */}
+        {preview && preview.feed.media.length > 0 && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            onClick={closePreview}
+          >
+            <div
+              className="relative max-h-[90vh] max-w-[90vw] w-full flex flex-col items-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={closePreview}
+                className="absolute -top-2 -right-2 z-10 rounded-full bg-[#3B2F1E] p-2 text-white hover:bg-[#4A7C59] transition"
+                aria-label="Tutup preview"
+              >
+                <X size={20} />
+              </button>
+
+              {/* Main image */}
+              <img
+                src={preview.feed.media[preview.index].media_url}
+                alt={`preview-${preview.index}`}
+                className="max-h-[80vh] max-w-full object-contain rounded-xl shadow-2xl border border-[#D4C4A8]/30"
+              />
+
+              {/* Navigation */}
+              {preview.feed.media.length > 1 && (
+                <>
+                  <button
+                    onClick={goPrev}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-[#4A7C59] transition"
+                    aria-label="Foto sebelumnya"
+                  >
+                    <ChevronLeft size={24} />
+                  </button>
+                  <button
+                    onClick={goNext}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-[#4A7C59] transition"
+                    aria-label="Foto berikutnya"
+                  >
+                    <ChevronRight size={24} />
+                  </button>
+
+                  {/* Indicator */}
+                  <div className="mt-4 flex items-center gap-2 text-sm text-white/80">
+                    {preview.feed.media.map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setPreview({ ...preview, index: i })}
+                        className={`h-1.5 rounded-full transition-all ${i === preview.index ? "w-6 bg-white" : "w-2 bg-white/50 hover:bg-white/70"}`}
+                      />
+                    ))}
+                    <span className="ml-3 tabular-nums">
+                      {preview.index + 1} / {preview.feed.media.length}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {/* Optional subtle info bar */}
+              <div className="mt-3 text-center text-xs text-white/60">
+                {preview.feed.user_name} •{" "}
+                {new Date(preview.feed.created_at).toLocaleDateString("id-ID", {
+                  day: "numeric",
+                  month: "short",
+                })}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
