@@ -14,7 +14,7 @@
  * IMPORTANT (2026 architecture):
  *   - No more `room_id`. Room is identified by (family_uuid + scope_type + small_family_id)
  *   - Target table = `messages` (created in migration 011), NOT the legacy `chat_message_archive`
- *   - Supabase will hard-delete messages older than 3 days via its own cron / pg_cron
+ *   - Supabase hard-deletes messages older than 1 day via pg_cron job (see db/supabase/004_add_chat_messages_ttl_cleanup.sql)
  *   - This script only does UPSERT (never deletes from local)
  *
  * Usage:

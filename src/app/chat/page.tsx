@@ -13,8 +13,7 @@ import { apiFetch } from "@/lib/api-client";
 import { useAuth } from "@/context/auth-context";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-// CUTOFF_DAYS + getCutoffDate sudah tidak digunakan lagi.
-// Sekarang kita ambil 50 pesan terbaru dari local DB (permanent), bukan berdasarkan cutoff 3 hari.
+// Local `messages` adalah sumber permanen. Supabase `messages` hanya transient (auto-delete >1 hari via pg_cron).
 
 export default function ChatPage() {
   const { logout } = useAuth();
@@ -94,7 +93,9 @@ export default function ChatPage() {
           msg.family_uuid === currentRoom.family_uuid &&
           msg.scope_type === currentRoom.scope_type &&
           (msg.small_family_id || null) ===
-            (currentRoom.small_family_uuid || currentRoom.small_family_id || null);
+            (currentRoom.small_family_uuid ||
+              currentRoom.small_family_id ||
+              null);
 
         if (isForCurrentRoom) {
           markRoomAsRead(currentRoom.id, msg.id);
@@ -107,8 +108,8 @@ export default function ChatPage() {
               (r.small_family_uuid || r.small_family_id || null) ===
                 (msg.small_family_id || null)
                 ? { ...r, unread_count: (r.unread_count || 0) + 1 }
-                : r
-            )
+                : r,
+            ),
           );
         }
       })
@@ -141,7 +142,7 @@ export default function ChatPage() {
         const firstRoom = generalRoom || data[0];
 
         const roomsWithClearedCurrent = data.map((r: any) =>
-          r.id === firstRoom?.id ? { ...r, unread_count: 0 } : r
+          r.id === firstRoom?.id ? { ...r, unread_count: 0 } : r,
         );
 
         setRooms(roomsWithClearedCurrent);
@@ -159,9 +160,7 @@ export default function ChatPage() {
 
     // Optimistic: clear badge for this room immediately in the local list
     setRooms((prev) =>
-      prev.map((r) =>
-        r.id === room.id ? { ...r, unread_count: 0 } : r
-      )
+      prev.map((r) => (r.id === room.id ? { ...r, unread_count: 0 } : r)),
     );
 
     setCurrentRoom(room);
@@ -188,9 +187,7 @@ export default function ChatPage() {
 
       // Optimistic update: set unread ke 0 di sidebar
       setRooms((prev) =>
-        prev.map((r) =>
-          r.id === roomId ? { ...r, unread_count: 0 } : r
-        )
+        prev.map((r) => (r.id === roomId ? { ...r, unread_count: 0 } : r)),
       );
     } catch (e) {
       console.error("Failed to mark room as read:", e);
@@ -275,11 +272,9 @@ export default function ChatPage() {
     if (!message.trim() || !currentRoom || !(user as any)?.uuid) return;
 
     const contentToSend = message.trim();
-    const roomIdToUse = currentRoom.id;
     const tempId = `temp-${Date.now()}`;
     const tempMsg: ChatMessage = {
       id: tempId,
-      room_id: roomIdToUse,
       sender_id: (user as any)?.uuid || "current-user",
       content: contentToSend,
       type: "text",
@@ -291,7 +286,10 @@ export default function ChatPage() {
     try {
       const res = await apiFetch("/api/chat/send", {
         method: "POST",
-        body: JSON.stringify({ room_id: currentRoom.id, content: contentToSend }),
+        body: JSON.stringify({
+          room_id: currentRoom.id,
+          content: contentToSend,
+        }),
       });
 
       if (res.ok) {
@@ -341,7 +339,10 @@ export default function ChatPage() {
             return (
               <button
                 key={room.id}
-                onClick={() => { selectRoom(room); setMobileRoomsOpen(false); }}
+                onClick={() => {
+                  selectRoom(room);
+                  setMobileRoomsOpen(false);
+                }}
                 className={[
                   "w-full flex items-center gap-2.5 px-3 py-2.5 mb-1 rounded-xl text-sm transition-all text-left",
                   isActive
@@ -377,7 +378,10 @@ export default function ChatPage() {
             return (
               <button
                 key={room.id}
-                onClick={() => { selectRoom(room); setMobileRoomsOpen(false); }}
+                onClick={() => {
+                  selectRoom(room);
+                  setMobileRoomsOpen(false);
+                }}
                 className={[
                   "w-full flex items-center gap-2.5 px-3 py-2.5 mb-1 rounded-xl text-sm transition-all text-left",
                   isActive
@@ -420,47 +424,46 @@ export default function ChatPage() {
       ROOT: h-full so we fill exactly the space AppSidebar's <main> gives us.
       flex flex-col + overflow-hidden to start the height chain.
     */
-<div className="flex flex-col h-full overflow-hidden bg-[#FDFAF5] rounded-xl border border-[#D4C4A8] shadow-sm">
-
-       {/* ── Top bar: "Chat Keluarga" title ── */}
-       <div className="flex items-center justify-between px-5 py-3 border-b border-[#D4C4A8] flex-shrink-0">
-         <h1 className="text-base font-semibold text-[#3B2F1E]">Chat Keluarga</h1>
-       </div>
+    <div className="flex flex-col h-full overflow-hidden bg-[#FDFAF5] rounded-xl border border-[#D4C4A8] shadow-sm">
+      {/* ── Top bar: "Chat Keluarga" title ── */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-[#D4C4A8] flex-shrink-0">
+        <h1 className="text-base font-semibold text-[#3B2F1E]">
+          Chat Keluarga
+        </h1>
+      </div>
 
       {/* ── Body: sidebar + chat column ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-
-{/* Desktop sidebar */}
-         <aside className="hidden md:flex w-52 border-r border-[#D4C4A8] bg-[#F5F0E8] flex-col flex-shrink-0 overflow-hidden">
-           {renderRoomList()}
-         </aside>
+        {/* Desktop sidebar */}
+        <aside className="hidden md:flex w-52 border-r border-[#D4C4A8] bg-[#F5F0E8] flex-col flex-shrink-0 overflow-hidden">
+          {renderRoomList()}
+        </aside>
 
         {/* ── Main chat column ── */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-
-{/* Room header */}
-           <div className="flex items-center gap-3 px-4 py-3 border-b border-[#D4C4A8] flex-shrink-0 bg-[#FDFAF5]">
-             {currentRoom && (
-               <>
-                 <div
-                   className={[
-                     "flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0",
-                     currentRoom.scope_type === "general"
-                       ? "bg-[#D6EAD9]"
-                       : "bg-[#D6EAD9]",
-                   ].join(" ")}
-                 >
-                   {currentRoom.scope_type === "general" ? (
-                     <Users className="h-4 w-4 text-[#4A7C59]" />
-                   ) : (
-                     <Home className="h-4 w-4 text-[#2E5239]" />
-                   )}
-                 </div>
-                 <div className="flex-1 min-w-0">
-                   <p className="font-semibold text-sm text-[#3B2F1E] truncate leading-tight">
-                     {currentRoom.name}
-                   </p>
-                   <p className="text-[11px] text-[#9C8B75] leading-tight mt-0.5">
+          {/* Room header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#D4C4A8] flex-shrink-0 bg-[#FDFAF5]">
+            {currentRoom && (
+              <>
+                <div
+                  className={[
+                    "flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0",
+                    currentRoom.scope_type === "general"
+                      ? "bg-[#D6EAD9]"
+                      : "bg-[#D6EAD9]",
+                  ].join(" ")}
+                >
+                  {currentRoom.scope_type === "general" ? (
+                    <Users className="h-4 w-4 text-[#4A7C59]" />
+                  ) : (
+                    <Home className="h-4 w-4 text-[#2E5239]" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-[#3B2F1E] truncate leading-tight">
+                    {currentRoom.name}
+                  </p>
+                  <p className="text-[11px] text-[#9C8B75] leading-tight mt-0.5">
                     {currentRoom.scope_type === "general"
                       ? "Keluarga besar · Semua anggota"
                       : "Keluarga inti · Hanya ayah + istri + anak"}
@@ -506,7 +509,9 @@ export default function ChatPage() {
 
             {loading ? (
               <div className="flex-1 flex items-center justify-center">
-                <p className="text-sm text-[#9C8B75] animate-pulse">Memuat pesan...</p>
+                <p className="text-sm text-[#9C8B75] animate-pulse">
+                  Memuat pesan...
+                </p>
               </div>
             ) : messages.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-3">
@@ -521,8 +526,10 @@ export default function ChatPage() {
                 const isMine = msg.sender_id === (user as any)?.uuid;
                 const prevMsg = messages[idx - 1];
                 const nextMsg = messages[idx + 1];
-                const sameAsPrev = prevMsg && prevMsg.sender_id === msg.sender_id;
-                const sameAsNext = nextMsg && nextMsg.sender_id === msg.sender_id;
+                const sameAsPrev =
+                  prevMsg && prevMsg.sender_id === msg.sender_id;
+                const sameAsNext =
+                  nextMsg && nextMsg.sender_id === msg.sender_id;
 
                 return (
                   <div
@@ -541,11 +548,18 @@ export default function ChatPage() {
                       ) : (
                         <Avatar className="h-7 w-7 flex-shrink-0 self-end mb-0.5">
                           {msg.sender_photo ? (
-                            <AvatarImage src={msg.sender_photo} alt={msg.sender_name || "User"} />
+                            <AvatarImage
+                              src={msg.sender_photo}
+                              alt={msg.sender_name || "User"}
+                            />
                           ) : null}
-<AvatarFallback className="text-[10px] font-semibold bg-[#D6EAD9] text-[#2E5239]">
-                             {(msg.sender_name?.[0] || String(msg.sender_id)?.[0] || "?").toUpperCase()}
-                           </AvatarFallback>
+                          <AvatarFallback className="text-[10px] font-semibold bg-[#D6EAD9] text-[#2E5239]">
+                            {(
+                              msg.sender_name?.[0] ||
+                              String(msg.sender_id)?.[0] ||
+                              "?"
+                            ).toUpperCase()}
+                          </AvatarFallback>
                         </Avatar>
                       )
                     ) : (
@@ -553,52 +567,59 @@ export default function ChatPage() {
                     )}
 
                     {/* Bubble */}
-<div
+                    <div
+                      className={[
+                        "max-w-[68%] sm:max-w-[55%] px-3.5 py-2 text-sm",
+                        // Rounded corners: WhatsApp style — flat corner on side closest to avatar
+                        isMine
+                          ? [
+                              "bg-[#4A7C59] text-white",
+                              sameAsPrev && sameAsNext
+                                ? "rounded-2xl rounded-tr-md"
+                                : sameAsPrev
+                                  ? "rounded-2xl rounded-br-md"
+                                  : sameAsNext
+                                    ? "rounded-2xl rounded-tr-md"
+                                    : "rounded-2xl rounded-tr-md",
+                            ].join(" ")
+                          : [
+                              "bg-[#FDFAF5] border border-[#D4C4A8] text-[#3B2F1E]",
+                              sameAsPrev && sameAsNext
+                                ? "rounded-2xl rounded-tl-md"
+                                : sameAsPrev
+                                  ? "rounded-2xl rounded-bl-md"
+                                  : sameAsNext
+                                    ? "rounded-2xl rounded-tl-md"
+                                    : "rounded-2xl rounded-tl-md",
+                            ].join(" "),
+                        // Temp message (optimistic) slightly faded
+                        String(msg.id).startsWith("temp-") ? "opacity-60" : "",
+                      ].join(" ")}
+                    >
+                      {/* Sender name — only for others, only first in group */}
+                      {!isMine && !sameAsPrev && (
+                        <p className="text-[10px] font-semibold text-[#4A7C59] mb-1 leading-none">
+                          {msg.sender_name ||
+                            `Anggota #${String(msg.sender_id).slice(0, 6)}`}
+                        </p>
+                      )}
+
+                      <p className="leading-relaxed break-words">
+                        {typeof msg.content === "string"
+                          ? msg.content
+                          : JSON.stringify(msg.content)}
+                      </p>
+
+                      <p
                         className={[
-                          "max-w-[68%] sm:max-w-[55%] px-3.5 py-2 text-sm",
-                          // Rounded corners: WhatsApp style — flat corner on side closest to avatar
-                          isMine
-                            ? [
-                                "bg-[#4A7C59] text-white",
-                                sameAsPrev && sameAsNext ? "rounded-2xl rounded-tr-md"
-                                : sameAsPrev ? "rounded-2xl rounded-br-md"
-                                : sameAsNext ? "rounded-2xl rounded-tr-md"
-                                : "rounded-2xl rounded-tr-md",
-                              ].join(" ")
-                            : [
-                                "bg-[#FDFAF5] border border-[#D4C4A8] text-[#3B2F1E]",
-                                sameAsPrev && sameAsNext ? "rounded-2xl rounded-tl-md"
-                                : sameAsPrev ? "rounded-2xl rounded-bl-md"
-                                : sameAsNext ? "rounded-2xl rounded-tl-md"
-                                : "rounded-2xl rounded-tl-md",
-                              ].join(" "),
-                          // Temp message (optimistic) slightly faded
-                          String(msg.id).startsWith("temp-") ? "opacity-60" : "",
+                          "text-[10px] mt-1 leading-none text-right",
+                          isMine ? "text-white/60" : "text-[#9C8B75]",
                         ].join(" ")}
                       >
-                        {/* Sender name — only for others, only first in group */}
-                        {!isMine && !sameAsPrev && (
-                          <p className="text-[10px] font-semibold text-[#4A7C59] mb-1 leading-none">
-                            {msg.sender_name || `Anggota #${String(msg.sender_id).slice(0, 6)}`}
-                          </p>
-                        )}
-
-                        <p className="leading-relaxed break-words">
-                          {typeof msg.content === "string"
-                            ? msg.content
-                            : JSON.stringify(msg.content)}
-                        </p>
-
-                        <p
-                          className={[
-                            "text-[10px] mt-1 leading-none text-right",
-                            isMine ? "text-white/60" : "text-[#9C8B75]",
-                          ].join(" ")}
-                        >
-                          {formatTime(msg.created_at)}
-                          {String(msg.id).startsWith("temp-") && " ·"}
-                        </p>
-                      </div>
+                        {formatTime(msg.created_at)}
+                        {String(msg.id).startsWith("temp-") && " ·"}
+                      </p>
+                    </div>
                   </div>
                 );
               })
@@ -644,29 +665,29 @@ export default function ChatPage() {
               className="fixed inset-0 z-40 bg-black/40 md:hidden"
               onClick={() => setMobileRoomsOpen(false)}
             />
-<div className="fixed inset-y-0 left-0 z-50 w-[78%] max-w-[280px] bg-[#FDFAF5] border-r border-[#D4C4A8] shadow-xl md:hidden flex flex-col">
-               <div className="flex items-center justify-between px-4 h-14 border-b flex-shrink-0">
-                 <p className="font-semibold text-sm text-[#9C8B75] tracking-wider uppercase text-xs">
-                   Pilih Ruang Chat
-                 </p>
-                 <Button
-                   variant="ghost"
-                   size="icon"
-                   onClick={() => setMobileRoomsOpen(false)}
-                   className="h-8 w-8"
-                 >
-                   <X className="h-4 w-4" />
-                 </Button>
-               </div>
-               <div className="flex-1 overflow-y-auto flex flex-col">
-                 {renderRoomList()}
-               </div>
-               <div className="px-4 py-3 border-t">
-                 <p className="text-[11px] text-[#9C8B75] text-center">
-                   Ketuk ruang untuk bergabung
-                 </p>
-               </div>
-             </div>
+            <div className="fixed inset-y-0 left-0 z-50 w-[78%] max-w-[280px] bg-[#FDFAF5] border-r border-[#D4C4A8] shadow-xl md:hidden flex flex-col">
+              <div className="flex items-center justify-between px-4 h-14 border-b flex-shrink-0">
+                <p className="font-semibold text-sm text-[#9C8B75] tracking-wider uppercase text-xs">
+                  Pilih Ruang Chat
+                </p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setMobileRoomsOpen(false)}
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex-1 overflow-y-auto flex flex-col">
+                {renderRoomList()}
+              </div>
+              <div className="px-4 py-3 border-t">
+                <p className="text-[11px] text-[#9C8B75] text-center">
+                  Ketuk ruang untuk bergabung
+                </p>
+              </div>
+            </div>
           </>
         )}
       </div>

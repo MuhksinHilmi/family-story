@@ -15,12 +15,16 @@ export async function GET(request: NextRequest) {
     }
 
     const nodesResult = await pool.query(
-      `SELECT id, family_id, user_id, full_name, gender, birth_date, death_date, 
-              photo_url, is_alive, nasab_line, birth_order, father_id, mother_id,
-              position_x, position_y, invitation_email, invitation_status, created_at, updated_at
-       FROM family_nodes 
-       WHERE family_id = $1
-       ORDER BY created_at`,
+      `SELECT 
+         fn.id, fn.family_id, fn.user_id, fn.full_name, fn.gender, fn.birth_date, fn.death_date, 
+         COALESCE(u.photo_url, fn.photo_url) AS photo_url,
+         fn.is_alive, fn.nasab_line, fn.birth_order, fn.father_id, fn.mother_id,
+         fn.position_x, fn.position_y, fn.invitation_email, fn.invitation_status, 
+         fn.created_at, fn.updated_at
+       FROM family_nodes fn
+       LEFT JOIN users u ON fn.user_id = u.id
+       WHERE fn.family_id = $1
+       ORDER BY fn.created_at`,
       [familyId],
     );
 

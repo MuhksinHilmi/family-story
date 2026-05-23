@@ -1,4 +1,4 @@
-PRD Lengkap — Chat Keluarga (Realtime Supabase) + Local Sync Harian + Retensi H+3
+PRD Lengkap — Chat Keluarga (Realtime Supabase) + Local Sync Harian + Retensi 1 Hari di Supabase (pg_cron TTL)
 
 ## 2026 Final Architecture (Sudah Diimplementasikan)
 
@@ -9,7 +9,7 @@ PRD Lengkap — Chat Keluarga (Realtime Supabase) + Local Sync Harian + Retensi 
 
 **Supabase `messages` = Transient Realtime Bus Only**
 - Hanya untuk Broadcast (trigger) + delivery cepat
-- Hard delete otomatis setelah ~3 hari (via cron / pg_cron)
+- Hard delete otomatis setelah 1 hari (24 jam) via pg_cron job `delete-old-family-chat-messages` (lihat db/supabase/004_...)
 - Tidak lagi menjadi sumber history
 
 **Send Flow (Local-First)**
@@ -41,7 +41,7 @@ Aplikasi chat untuk keluarga menggunakan:
 
 Supabase Postgres sebagai sumber pesan.
 Supabase Realtime (Broadcast via trigger) untuk pesan baru.
-Supabase auto-delete pesan lama setelah H+3.
+Supabase auto-delete pesan lama setelah 1 hari (via pg_cron).
 Local Postgres sebagai arsip jangka panjang (tidak ikut delete), yang disinkronkan dari Supabase via job sync harian “1 dump” untuk seluruh room sekaligus.
 2) Problem yang Dipecahkan
 Chat harus real-time untuk pesan baru.

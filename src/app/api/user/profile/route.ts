@@ -121,15 +121,35 @@ export async function PUT(request: NextRequest) {
 
     const result = await pool.query(query, values);
 
-    // Also update family_nodes if needed
-    await pool.query(
-      `UPDATE family_nodes SET 
-         full_name = COALESCE($1, full_name), 
-         gender = COALESCE($2, gender), 
-         birth_date = COALESCE($3, birth_date)
-       WHERE user_id = $4`,
-      [full_name, gender, birth_date, userId]
-    );
+    // Also update family_nodes if needed (keep tree avatars in sync)
+    const syncFields: string[] = [];
+    const syncValues: any[] = [];
+    let syncIdx = 1;
+
+    if (full_name !== undefined) {
+      syncFields.push(`full_name = $${syncIdx++}`);
+      syncValues.push(full_name);
+    }
+    if (gender !== undefined) {
+      syncFields.push(`gender = $${syncIdx++}`);
+      syncValues.push(gender);
+    }
+    if (birth_date !== undefined) {
+      syncFields.push(`birth_date = $${syncIdx++}`);
+      syncValues.push(birth_date);
+    }
+    if (photoUrl) {
+      syncFields.push(`photo_url = $${syncIdx++}`);
+      syncValues.push(photoUrl);
+    }
+
+    if (syncFields.length > 0) {
+      syncValues.push(userId);
+      await pool.query(
+        `UPDATE family_nodes SET ${syncFields.join(', ')} WHERE user_id = $${syncIdx}`,
+        syncValues
+      );
+    }
 
     return NextResponse.json({
       message: 'Profil berhasil diperbarui',

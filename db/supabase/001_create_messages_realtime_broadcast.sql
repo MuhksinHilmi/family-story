@@ -1,7 +1,7 @@
 -- Supabase Migration: Chat messages table + Realtime Broadcast via trigger + Family RLS
 -- Follows PRD integration_chat.md + current Supabase Broadcast from Database docs (2026)
 
--- 1. Core messages table (Supabase - transient source for realtime + H+3 retention)
+-- 1. Core messages table (Supabase - transient source for realtime + 1-day retention via pg_cron)
 -- This is NOT the permanent store. Local Postgres `messages` table is the authoritative history.
 -- Room is identified by composite key: family_uuid + scope_type + small_family_id (users.uuid of husband)
 -- No `room_id` column is used anymore (cleaned up in 2026).
@@ -145,11 +145,11 @@ CREATE TRIGGER messages_broadcast_trigger
 -- (RLS already protects rows)
 
 -- 8. Comments for documentation (updated 2026 cleanup)
-COMMENT ON TABLE public.messages IS 'Transient Supabase table for realtime delivery only (H+3 retention). Permanent authoritative messages live in local Postgres `messages` table. Room identified by family_uuid + scope_type + small_family_id (no room_id column).';
+COMMENT ON TABLE public.messages IS 'Transient Supabase table for realtime delivery only (auto-deleted after 1 day via pg_cron job). Permanent authoritative messages live in local Postgres `messages` table. Room identified by family_uuid + scope_type + small_family_id (no room_id column).';
 COMMENT ON FUNCTION public.broadcast_new_message() IS 'Broadcasts new message via Supabase Broadcast (no service key needed). Payload does not include legacy room_id.';
 
 -- After applying this migration (2026 cleanup):
 -- - No more `room_id` anywhere in chat system.
 -- - All code must use family_uuid + scope_type + small_family_id (users.uuid of husband for small rooms).
 -- - Create daily sync / replication job from this table → local `messages` table (not the old chat_message_archive).
--- - Add pg_cron or Edge Function for H+3 hard delete on this table.
+-- - pg_cron job "delete-old-family-chat-messages" (see 004_add_chat_messages_ttl_cleanup.sql) hard-deletes rows older than 1 day.

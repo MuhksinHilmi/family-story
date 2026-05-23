@@ -20,61 +20,114 @@ export const FamilyNode = memo(({ data, selected, onInfoClick, onStartConnection
     <div className="relative">
       <div
         className={cn(
-          'w-32 h-40 rounded-lg border-2 flex flex-col items-center justify-center p-2 transition-all',
-          isSelected ? 'border-[#4A7C59] bg-[#D6EAD9]' : 'border-[#D4C4A8] bg-[#FDFAF5]',
+          'w-36 h-44 rounded-2xl border border-[#D4C4A8]/60 flex flex-col items-center p-2.5 transition-all shadow-md hover:shadow-lg',
+          // Gender-based subtle gradient
+          data.gender === 'male'
+            ? 'bg-gradient-to-br from-[#EAF4ED] to-[#FDFAF5]'
+            : 'bg-gradient-to-br from-[#F5EDE4] to-[#FDFAF5]',
+          // Selected state with glow
+          isSelected && 'border-2 border-[#4A7C59] bg-[#EAF4ED] shadow-[0_0_0_3px_rgba(74,124,89,0.15)]',
+          // Deceased
           isDeceased && 'grayscale opacity-70',
-          isPending && 'border-dashed border-[#C4922A] bg-[#F5E8C8]'
+          // Pending with stripe pattern
+          isPending && 'border-dashed border-[#C4922A] bg-[repeating-linear-gradient(45deg,#F5E8C8,#F5E8C8_4px,#FDFAF5_4px,#FDFAF5_12px)]'
         )}
       >
+        {/* Deceased subtle cross overlay */}
+        {isDeceased && (
+          <div className="absolute inset-0 rounded-2xl bg-[repeating-linear-gradient(135deg,#00000010_0,#00000010_1px,transparent_1px,transparent_4px)] pointer-events-none" />
+        )}
+
+        {/* Status badge - top right */}
         {isPending && (
-          <div className="absolute -top-2 -right-2 w-5 h-5 bg-[#C4922A] rounded-full flex items-center justify-center text-white text-[10px] font-bold">
+          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-sm z-10">
             !
           </div>
         )}
 
         {!isPending && !isDeceased && (
-          <div className="absolute -top-2 -right-2 w-5 h-5 bg-[#4A7C59] rounded-full" />
+          <span className="animate-pulse w-3 h-3 rounded-full bg-[#4A7C59] ring-2 ring-white absolute -top-1 -right-1 z-10" />
         )}
 
-        <div className="w-16 h-16 rounded-full overflow-hidden mb-1 border">
+        {/* Info button - top left */}
+        <button
+          type="button"
+          onClick={() => onInfoClick?.(data.id)}
+          className="absolute -top-2 -left-2 w-6 h-6 bg-white shadow-sm border border-[#D4C4A8] hover:bg-[#F5F0E8] rounded-full flex items-center justify-center transition-colors z-10"
+          title="Info"
+        >
+          <Info className="h-3.5 w-3.5 text-[#6B5B45]" />
+        </button>
+
+        {/* Avatar - larger with gender ring */}
+        <div
+          className={cn(
+            'w-20 h-20 rounded-full overflow-hidden mb-2 border-2 border-white shadow-sm flex-shrink-0',
+            data.gender === 'male'
+              ? 'ring-2 ring-[#4A7C59] ring-offset-2 ring-offset-[#FDFAF5]'
+              : 'ring-2 ring-[#C4922A] ring-offset-2 ring-offset-[#FDFAF5]'
+          )}
+        >
           {data.photo_url ? (
-            <img src={data.photo_url} alt={data.full_name} className="w-full h-full object-cover" />
+            <img
+              src={data.photo_url}
+              alt={data.full_name}
+              className="w-full h-full object-cover"
+            />
           ) : (
-            <div className="w-full h-full bg-[#D6EAD9] flex items-center justify-center text-lg font-bold text-[#2E5239]">
-              {data.full_name.charAt(0)}
+            <div className="w-full h-full bg-gradient-to-br from-[#4A7C59] to-[#2E5239] flex items-center justify-center text-2xl font-bold text-white">
+              {data.full_name.charAt(0).toUpperCase()}
             </div>
           )}
         </div>
 
-        <div className="text-sm font-medium text-center truncate w-full px-1">
-          <div className="truncate text-[#3B2F1E]">{data.full_name}</div>
-          {data.nasab_line && (
-            <div className="text-[10px] text-[#8B6F47] truncate">{data.nasab_line}</div>
-          )}
+        {/* Name */}
+        <div className="text-[13px] font-semibold text-[#2C1A0E] tracking-tight text-center truncate w-full px-1 leading-tight">
+          {data.full_name}
         </div>
 
-        {isPending && (
-          <div className="text-[10px] text-[#C4922A] font-medium">
-            Menunggu
+        {/* Nasab line with highlighted prefix */}
+        {data.nasab_line && (
+          <div className="text-[10px] italic text-[#A07850] text-center truncate w-full px-1 mt-0.5">
+            {data.nasab_line.toLowerCase().startsWith('bin') ? (
+              <>
+                <span className="not-italic font-medium text-[#4A7C59]">bin </span>
+                {data.nasab_line.replace(/^bin\s*/i, '')}
+              </>
+            ) : data.nasab_line.toLowerCase().startsWith('binti') ? (
+              <>
+                <span className="not-italic font-medium text-[#4A7C59]">binti </span>
+                {data.nasab_line.replace(/^binti\s*/i, '')}
+              </>
+            ) : (
+              data.nasab_line
+            )}
           </div>
         )}
 
-        <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-[#FDFAF5] rounded-full border flex items-center justify-center">
-          <span className={cn('text-sm', data.gender === 'male' ? 'text-[#4A7C59]' : 'text-[#8B6F47]')}>
-            {data.gender === 'male' ? '♂' : '♀'}
+        {/* Gender pill badge - inside card at bottom */}
+        <div className="mt-auto mb-1">
+          <span
+            className={cn(
+              'text-[9px] px-2 py-0.5 rounded-full font-medium tracking-wide',
+              data.gender === 'male'
+                ? 'bg-[#4A7C59]/10 text-[#4A7C59]'
+                : 'bg-[#C4922A]/10 text-[#C4922A]'
+            )}
+          >
+            {data.gender === 'male' ? 'Laki-laki' : 'Perempuan'}
           </span>
         </div>
+
+        {/* Pending label */}
+        {isPending && (
+          <div className="text-[10px] text-[#C4922A] font-medium -mt-0.5 mb-0.5">
+            Menunggu
+          </div>
+        )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => onInfoClick?.(data.id)}
-        className="absolute -top-2 -left-2 w-5 h-5 bg-[#EDE4D3] hover:bg-[#D4C4A8] rounded-full flex items-center justify-center border transition-colors"
-        title="Info"
-      >
-        <Info className="h-5 w-5 text-[#6B5B45]" />
-      </button>
-
+      {/* Connection Handles - positions unchanged */}
       <Handle type="source" position={Position.Right} id="right" />
       <Handle type="target" position={Position.Left} id="left" />
       <Handle type="source" position={Position.Bottom} id="bottom" />

@@ -702,10 +702,7 @@ export default function CreateFeedPage() {
                     className="flex items-center gap-1 rounded-full bg-[#EDE4D3] px-3 py-1 text-sm text-[#3B2F1E]"
                   >
                     #{tag}
-                    <button
-                      onClick={() => removeTag(tag)}
-                      className="text-xs"
-                    >
+                    <button onClick={() => removeTag(tag)} className="text-xs">
                       ×
                     </button>
                   </span>
@@ -785,12 +782,6 @@ export default function CreateFeedPage() {
                 ← Kembali
               </button>
               <div className="flex items-center gap-3">
-                <button className="flex items-center gap-1.5 text-sm text-[#6B5B45] hover:text-[#3B2F1E] transition">
-                  <Smile size={18} /> Emoji
-                </button>
-                <button className="flex items-center gap-1.5 text-sm text-[#6B5B45] hover:text-[#3B2F1E] transition">
-                  <AtSign size={18} /> Mention
-                </button>
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting || !selectedFamilyUuid}

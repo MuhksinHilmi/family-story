@@ -103,7 +103,7 @@ export interface ChatRoom {
 
 export interface ChatMessage {
   id: string;
-  room_id: string;
+  // room_id removed (2026): messages now identified by family_uuid + scope_type + small_family_id
   sender_id: string;
   sender_name?: string;
   sender_photo?: string;   // profile photo URL of sender (from snapshot)

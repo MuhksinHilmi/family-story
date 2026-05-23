@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import {
   Heart,
   MessageCircle,
-  MoreHorizontal,
   Image,
   Users,
   Calendar,
@@ -40,6 +39,14 @@ interface Feed {
   }>;
 }
 
+interface CommentItem {
+  id: string;
+  user_name: string;
+  user_photo: string | null;
+  content: string;
+  created_at: string;
+}
+
 export default function FeedsPage() {
   const [families, setFamilies] = useState<any[]>([]);
   const [selectedFamilyUuid, setSelectedFamilyUuid] = useState<string>("");
@@ -51,6 +58,16 @@ export default function FeedsPage() {
   const [hasMore, setHasMore] = useState(true);
   const [newFeedsCount, setNewFeedsCount] = useState(0);
 
+  // Flip card comment states
+  const [flippedFeedId, setFlippedFeedId] = useState<string | null>(null);
+  const [comments, setComments] = useState<Record<string, CommentItem[]>>({});
+  const [commentText, setCommentText] = useState<Record<string, string>>({});
+  const [loadingComments, setLoadingComments] = useState<Record<string, boolean>>({});
+
+  // Stable flip card height measurement
+  const frontRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [cardHeights, setCardHeights] = useState<Record<string, number>>({});
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Image preview modal state
@@ -58,6 +75,22 @@ export default function FeedsPage() {
 
   const { user } = useAuth();
   const firstName = user?.full_name?.split(" ")[0] || "Kamu";
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 11) return "Selamat Pagi ☀️";
+    if (hour >= 11 && hour < 15) return "Selamat Siang 🌤️";
+    if (hour >= 15 && hour < 18) return "Selamat Sore 🌅";
+    return "Selamat Malam 🌙";
+  }, []);
+
+  const todayDate = useMemo(() => {
+    const date = new Date();
+    const weekday = date.toLocaleDateString("id-ID", { weekday: "long" });
+    const day = date.getDate();
+    const month = date.toLocaleDateString("id-ID", { month: "long" });
+    return `${weekday}, ${day} ${month}`;
+  }, []);
 
   // Infinite scroll handler (on internal container, not window)
   useEffect(() => {
@@ -234,6 +267,75 @@ export default function FeedsPage() {
     }
   };
 
+  // === Flip card comment handlers ===
+  const fetchComments = async (feedId: string) => {
+    if (comments[feedId]) return; // sudah pernah di-fetch
+    setLoadingComments((prev) => ({ ...prev, [feedId]: true }));
+    try {
+      const res = await apiFetch(`/api/feeds/${feedId}/comments`);
+      if (res.ok) {
+        const data = await res.json();
+        // Normalize API field "comment" → "content" for UI
+        const normalized: CommentItem[] = data.map((c: any) => ({
+          id: c.id,
+          user_name: c.user_name,
+          user_photo: c.user_photo,
+          content: c.comment,
+          created_at: c.created_at,
+        }));
+        setComments((prev) => ({ ...prev, [feedId]: normalized }));
+      }
+    } finally {
+      setLoadingComments((prev) => ({ ...prev, [feedId]: false }));
+    }
+  };
+
+  const submitComment = async (feedId: string) => {
+    const text = commentText[feedId]?.trim();
+    if (!text) return;
+    try {
+      const res = await apiFetch(`/api/feeds/${feedId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment: text }),
+      });
+      if (res.ok) {
+        const apiComment = await res.json();
+        const newComment: CommentItem = {
+          id: apiComment.id,
+          user_name: apiComment.user_name,
+          user_photo: apiComment.user_photo,
+          content: apiComment.comment,
+          created_at: apiComment.created_at,
+        };
+        setComments((prev) => ({
+          ...prev,
+          [feedId]: [newComment, ...(prev[feedId] || [])],
+        }));
+        setCommentText((prev) => ({ ...prev, [feedId]: "" }));
+        // update comment_count di feed card
+        setFeeds((prev) =>
+          prev.map((f) =>
+            f.id === feedId
+              ? { ...f, comment_count: Number(f.comment_count) + 1 }
+              : f,
+          ),
+        );
+      }
+    } catch (err) {
+      console.error("Submit comment error", err);
+    }
+  };
+
+  const toggleFlip = (feedId: string) => {
+    if (flippedFeedId === feedId) {
+      setFlippedFeedId(null);
+    } else {
+      setFlippedFeedId(feedId);
+      fetchComments(feedId);
+    }
+  };
+
   // Image preview helpers
   const openPreview = (feed: Feed, index: number) => {
     setPreview({ feed, index });
@@ -267,6 +369,25 @@ export default function FeedsPage() {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [preview]);
+
+  // Measure front card heights for stable flip card sizing on mobile
+  useEffect(() => {
+    const heights: Record<string, number> = {};
+    feeds.forEach((feed) => {
+      const el = frontRefs.current[feed.id];
+      if (el) heights[feed.id] = el.offsetHeight;
+    });
+    setCardHeights(heights);
+  }, [feeds]);
+
+  useEffect(() => {
+    const heights: Record<string, number> = {};
+    feeds.forEach((feed) => {
+      const el = frontRefs.current[feed.id];
+      if (el) heights[feed.id] = el.offsetHeight;
+    });
+    setCardHeights((prev) => ({ ...prev, ...heights }));
+  }, [flippedFeedId]);
 
   // New scope icon (replaces getScopeLabel + getScopeColor)
   const getScopeIcon = (feed: Feed) => {
@@ -344,37 +465,43 @@ export default function FeedsPage() {
   return (
     <div ref={scrollContainerRef} className="overflow-y-auto h-full">
       <div className="max-w-2xl mx-auto pb-10">
-        <div className="flex items-center justify-between px-4 pt-6 pb-4 my-4 sticky top-0 bg-[#FDFAF5] z-40 border-b border-[#D4C4A8]">
-          <div className="flex items-center gap-3 ">
-            <h3 className="text-2xl font-semibold text-[#3B2F1E]">
-              Halo, {firstName}!
-            </h3>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-[#D4C4A8] hover:bg-[#F5F0E8] active:bg-[#EDE4D3] disabled:opacity-60 transition"
-            >
-              {refreshing ? (
-                <>
-                  <span className="animate-spin inline-block w-3 h-3 border-2 border-[#4A7C59] border-t-transparent rounded-full" />
-                  Menyegarkan...
-                </>
-              ) : (
-                <>
-                  <RefreshCw size={16} />
-                </>
-              )}
-            </button>
+        <div className="sticky top-0 z-40 px-4 pt-5 pb-3 bg-[#F5F0E8] ">
+          {/* Row 1: Greeting + Date + Refresh */}
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs text-[#9C8B75]">{greeting}</div>
+              <h3 className="text-2xl font-bold text-[#2C1A0E] leading-none mt-0.5">
+                Halo, {firstName}!
+              </h3>
+            </div>
+
+            <div className="text-right">
+              <div className="text-xs text-[#9C8B75]">{todayDate}</div>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="mt-1 w-8 h-8 flex items-center justify-center rounded-full border border-[#D4C4A8] hover:bg-[#EDE4D3] disabled:opacity-60 transition"
+              >
+                <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+              </button>
+            </div>
           </div>
 
-          {families.length > 0 && (
-            <Link
-              href="/feeds/new"
-              className="px-4 py-2 bg-[#4A7C59] hover:bg-[#2E5239] text-white rounded-xl text-sm font-medium shadow-sm"
-            >
-              + Momen
-            </Link>
-          )}
+          {/* Row 2: Tagline + Create button */}
+          <div className="flex items-center justify-between mt-3">
+            <p className="text-xs italic text-[#A07850]">
+              Bagikan momen bersama keluarga
+            </p>
+
+            {families.length > 0 && (
+              <Link
+                href="/feeds/new"
+                className="px-5 py-2.5 bg-[#4A7C59] hover:bg-[#2E5239] text-white rounded-2xl text-sm font-semibold shadow-md hover:shadow-lg transition"
+              >
+                + Momen
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Banner "X feed baru dimuat" */}
@@ -473,130 +600,243 @@ export default function FeedsPage() {
         ) : (
           <div className="space-y-6 px-4">
             {feeds.map((feed) => (
-              <div
-                key={feed.id}
-                className="bg-white border border-[#D4C4A8] rounded-2xl overflow-hidden shadow-sm"
-              >
-                {/* Media area — full width, no border, no padding */}
-                <div className="relative">
-                  {/* Media */}
-                  {renderMedia(feed.media, (idx) => openPreview(feed, idx))}
-
-                  {/* Overlay: gradient at the top for legibility (stronger for bright images) */}
-                  {feed.media && feed.media.length > 0 && (
-                    <div
-                      className="absolute inset-x-0 top-0 h-24 
-                    bg-gradient-to-b from-black/80 via-black/50 to-transparent pointer-events-none"
-                    />
-                  )}
-
-                  {/* Overlay: user info top-left */}
-                  {feed.media && feed.media.length > 0 && (
-                    <div className="absolute top-3 left-3 flex items-center gap-2">
-                      <div
-                        className="w-8 h-8 rounded-full bg-[#EDE4D3] overflow-hidden 
-                      ring-2 ring-white/60 flex-shrink-0"
-                      >
-                        {feed.user_photo && (
-                          <img
-                            src={feed.user_photo}
-                            alt=""
-                            className="w-full h-full object-cover"
-                          />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-white text-xs font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
-                          {feed.user_name}
-                        </p>
-                        <p className="text-white/90 text-[10px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.85)]">
-                          {new Date(feed.created_at).toLocaleDateString(
-                            "id-ID",
-                            {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            },
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Overlay: scope icon top-right */}
-                  {feed.media && feed.media.length > 0 && (
-                    <div className="absolute top-3 right-3">
-                      {getScopeIcon(feed)}
-                    </div>
-                  )}
-                </div>
-
-                {/* If NO media: show user info as normal card header */}
-                {(!feed.media || feed.media.length === 0) && (
-                  <div
-                    className="flex items-center justify-between px-4 py-3 border-b 
-                  border-[#D4C4A8]"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-[#EDE4D3] overflow-hidden">
-                        {feed.user_photo && (
-                          <img
-                            src={feed.user_photo}
-                            alt=""
-                            className="w-full h-full object-cover"
-                          />
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-sm">
-                          {feed.user_name}
-                        </p>
-                        <p className="text-[10px] text-[#9C8B75]">
-                          {new Date(feed.created_at).toLocaleDateString(
-                            "id-ID",
-                            {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            },
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <div>{getScopeIcon(feed)}</div>
-                  </div>
-                )}
-
-                {/* Caption */}
-                {feed.caption && (
-                  <div className="px-4 py-3 text-sm text-[#3B2F1E] whitespace-pre-line">
-                    {feed.caption}
-                  </div>
-                )}
-
-                {/* Action bar */}
+              <div key={feed.id} style={{ perspective: "1000px" }} className="w-full">
                 <div
-                  className="px-4 py-3 border-t border-[#D4C4A8] flex items-center 
-                gap-5 text-sm"
+                  className="relative grid w-full"
+                  style={{
+                    transformStyle: "preserve-3d",
+                    transition: "transform 0.55s cubic-bezier(0.4, 0.2, 0.2, 1)",
+                    transform: flippedFeedId === feed.id ? "rotateY(180deg)" : "rotateY(0deg)",
+                    gridTemplateAreas: '"stack"',
+                    minHeight: cardHeights[feed.id] ? `${cardHeights[feed.id]}px` : undefined,
+                  }}
                 >
-                  <button
-                    onClick={() => toggleLike(feed.id, feed.has_liked)}
-                    className={`flex items-center gap-1.5 
-                    ${feed.has_liked ? "text-red-500" : "text-[#6B5B45]"}`}
+                  {/* ===== SISI DEPAN (FOTO + KONTEN ASLI) ===== */}
+                  <div
+                    ref={(el) => { frontRefs.current[feed.id] = el; }}
+                    style={{ gridArea: "stack", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+                    className="w-full bg-white border border-[#D4C4A8] rounded-2xl overflow-hidden shadow-sm"
                   >
-                    <Heart
-                      className={feed.has_liked ? "fill-current" : ""}
-                      size={18}
-                    />
-                    <span>{feed.like_count}</span>
-                  </button>
-                  <div className="flex items-center gap-1.5 text-[#6B5B45]">
-                    <MessageCircle size={18} />
-                    <span>{feed.comment_count}</span>
+                    {/* Media area — full width, no border, no padding */}
+                    <div className="relative">
+                      {/* Media */}
+                      {renderMedia(feed.media, (idx) => openPreview(feed, idx))}
+
+                      {/* Overlay: gradient at the top for legibility (stronger for bright images) */}
+                      {feed.media && feed.media.length > 0 && (
+                        <div
+                          className="absolute inset-x-0 top-0 h-24 
+                        bg-gradient-to-b from-black/80 via-black/50 to-transparent pointer-events-none"
+                        />
+                      )}
+
+                      {/* Overlay: user info top-left */}
+                      {feed.media && feed.media.length > 0 && (
+                        <div className="absolute top-3 left-3 flex items-center gap-2">
+                          <div
+                            className="w-8 h-8 rounded-full bg-[#EDE4D3] overflow-hidden 
+                          ring-2 ring-white/60 flex-shrink-0"
+                          >
+                            {feed.user_photo && (
+                              <img
+                                src={feed.user_photo}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-white text-xs font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+                              {feed.user_name}
+                            </p>
+                            <p className="text-white/90 text-[10px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.85)]">
+                              {new Date(feed.created_at).toLocaleDateString(
+                                "id-ID",
+                                {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Overlay: scope icon top-right */}
+                      {feed.media && feed.media.length > 0 && (
+                        <div className="absolute top-3 right-3">
+                          {getScopeIcon(feed)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* If NO media: show user info as normal card header */}
+                    {(!feed.media || feed.media.length === 0) && (
+                      <div
+                        className="flex items-center justify-between px-4 py-3 border-b 
+                      border-[#D4C4A8]"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-[#EDE4D3] overflow-hidden">
+                            {feed.user_photo && (
+                              <img
+                                src={feed.user_photo}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-sm">
+                              {feed.user_name}
+                            </p>
+                            <p className="text-[10px] text-[#9C8B75]">
+                              {new Date(feed.created_at).toLocaleDateString(
+                                "id-ID",
+                                {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div>{getScopeIcon(feed)}</div>
+                      </div>
+                    )}
+
+                    {/* Caption */}
+                    {feed.caption && (
+                      <div className="px-4 py-3 text-sm text-[#3B2F1E] whitespace-pre-line">
+                        {feed.caption}
+                      </div>
+                    )}
+
+                    {/* Action bar */}
+                    <div
+                      className="px-4 py-3 border-t border-[#D4C4A8] flex items-center 
+                    gap-5 text-sm"
+                    >
+                      <button
+                        onClick={() => toggleLike(feed.id, feed.has_liked)}
+                        className={`flex items-center gap-1.5 
+                        ${feed.has_liked ? "text-red-500" : "text-[#6B5B45]"}`}
+                      >
+                        <Heart
+                          className={feed.has_liked ? "fill-current" : ""}
+                          size={18}
+                        />
+                        <span>{feed.like_count}</span>
+                      </button>
+                      <button
+                        onClick={() => toggleFlip(feed.id)}
+                        className="flex items-center gap-1.5 text-[#6B5B45] hover:text-[#4A7C59] active:scale-[0.985] transition"
+                      >
+                        <MessageCircle size={18} />
+                        <span>{feed.comment_count}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ===== SISI BELAKANG (COMMENT) ===== */}
+                  <div
+                    style={{
+                      gridArea: "stack",
+                      backfaceVisibility: "hidden",
+                      WebkitBackfaceVisibility: "hidden",
+                      transform: "rotateY(180deg)",
+                      height: cardHeights[feed.id] ? `${cardHeights[feed.id]}px` : "100%",
+                    }}
+                    className="w-full bg-[#FDFAF5] border border-[#D4C4A8] rounded-2xl overflow-hidden shadow-sm flex flex-col"
+                  >
+                    {/* Header belakang card */}
+                    <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-[#D4C4A8] bg-white">
+                      <div className="flex items-center gap-2">
+                        <MessageCircle size={16} className="text-[#4A7C59]" />
+                        <span className="text-sm font-semibold text-[#3B2F1E]">
+                          Komentar ({feed.comment_count})
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setFlippedFeedId(null)}
+                        className="text-xs text-[#9C8B75] hover:text-[#3B2F1E] flex items-center gap-1 transition"
+                      >
+                        <ChevronLeft size={14} />
+                        Kembali
+                      </button>
+                    </div>
+
+                    {/* List comment — internal scroll only */}
+                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                      {loadingComments[feed.id] ? (
+                        <div className="flex justify-center py-6">
+                          <span className="animate-spin w-5 h-5 border-2 border-[#4A7C59] border-t-transparent rounded-full" />
+                        </div>
+                      ) : (comments[feed.id] || []).length === 0 ? (
+                        <div className="text-center py-8 text-[#9C8B75] text-sm">
+                          Belum ada komentar. Jadilah yang pertama! 💬
+                        </div>
+                      ) : (
+                        (comments[feed.id] || []).map((comment) => (
+                          <div key={comment.id} className="flex gap-2.5 items-start">
+                            <div className="w-7 h-7 rounded-full bg-[#EDE4D3] overflow-hidden flex-shrink-0 mt-0.5">
+                              {comment.user_photo && (
+                                <img
+                                  src={comment.user_photo}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              )}
+                            </div>
+                            <div className="flex-1 bg-white rounded-xl px-3 py-2 border border-[#E8DFD0] shadow-sm">
+                              <p className="text-xs font-semibold text-[#3B2F1E]">
+                                {comment.user_name}
+                              </p>
+                              <p className="text-sm text-[#4B3B2A] leading-snug mt-0.5">
+                                {comment.content}
+                              </p>
+                              <p className="text-[10px] text-[#B0A090] mt-1">
+                                {new Date(comment.created_at).toLocaleDateString("id-ID", {
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Input comment */}
+                    <div className="flex-shrink-0 px-4 py-3 border-t border-[#D4C4A8] bg-white flex gap-2">
+                      <input
+                        type="text"
+                        value={commentText[feed.id] || ""}
+                        onChange={(e) =>
+                          setCommentText((prev) => ({ ...prev, [feed.id]: e.target.value }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") submitComment(feed.id);
+                        }}
+                        placeholder="Tulis komentar..."
+                        className="flex-1 text-sm px-3 py-2 rounded-xl border border-[#D4C4A8] bg-[#FDFAF5] focus:outline-none focus:ring-1 focus:ring-[#4A7C59] text-[#3B2F1E] placeholder:text-[#B0A090]"
+                      />
+                      <button
+                        onClick={() => submitComment(feed.id)}
+                        disabled={!commentText[feed.id]?.trim()}
+                        className="px-4 py-2 bg-[#4A7C59] hover:bg-[#2E5239] text-white rounded-xl text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      >
+                        Kirim
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

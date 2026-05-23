@@ -8,7 +8,7 @@ import pool from '@/lib/db_helper'; // for fetching sender name + local insert
  * 2026 Architecture (Local-First + Realtime Bus)
  *
  * - Local Postgres `messages`  = Permanent source of truth (history + unread)
- * - Supabase `messages`        = Transient realtime delivery bus (H+3 retention)
+ * - Supabase `messages`        = Transient realtime delivery bus (auto-deleted after 1 day)
  *
  * Flow saat kirim pesan:
  *   1. Insert ke local `messages` (aman, langsung tersimpan)
@@ -17,7 +17,7 @@ import pool from '@/lib/db_helper'; // for fetching sender name + local insert
  *
  * Keuntungan:
  * - Refresh halaman tidak pernah kehilangan pesan
- * - Supabase boleh hapus data lama setelah 3 hari
+ * - Supabase otomatis hapus pesan >1 hari (via pg_cron) agar storage tidak membengkak
  * - Unread tracking & history 100% ada di server DB
  */
 
