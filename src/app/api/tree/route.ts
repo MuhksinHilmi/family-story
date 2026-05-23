@@ -3,285 +3,225 @@ import pool from '@/lib/db_helper';
 import { Edge } from "@xyflow/react";
 
 export async function GET(request: NextRequest) {
+  const client = await pool.connect();
   try {
     const { searchParams } = new URL(request.url);
-    const familyId = searchParams.get("family_id");
+    const familyIdParam = searchParams.get("family_id") || searchParams.get("nuclear_family_id");
 
-    if (!familyId) {
+    if (!familyIdParam) {
       return NextResponse.json(
-        { error: "family_id diperlukan" },
+        { error: "family_id (nuclear_family_id) diperlukan" },
         { status: 400 },
       );
     }
 
-    const nodesResult = await pool.query(
+    const nuclearFamilyId = parseInt(familyIdParam, 10);
+    if (isNaN(nuclearFamilyId)) {
+      return NextResponse.json({ error: "family_id tidak valid" }, { status: 400 });
+    }
+
+    // NEW SCHEMA LOADER
+    const membersRes = await client.query(
       `SELECT 
-         fn.id, fn.family_id, fn.user_id, fn.full_name, fn.gender, fn.birth_date, fn.death_date, 
-         COALESCE(u.photo_url, fn.photo_url) AS photo_url,
-         fn.is_alive, fn.nasab_line, fn.birth_order, fn.father_id, fn.mother_id,
-         fn.position_x, fn.position_y, fn.invitation_email, fn.invitation_status, 
-         fn.created_at, fn.updated_at
-       FROM family_nodes fn
-       LEFT JOIN users u ON fn.user_id = u.id
-       WHERE fn.family_id = $1
-       ORDER BY fn.created_at`,
-      [familyId],
+         n.id, n.uuid, n.user_id, n.full_name, n.gender, n.birth_date, n.death_date,
+         n.photo_url, n.is_alive, n.birth_order, n.current_nuclear_family_id,
+         n.created_at, n.updated_at,
+         m.role, m.join_reason
+       FROM nuclear_family_memberships m
+       JOIN nodes n ON n.id = m.node_id
+       WHERE m.nuclear_family_id = $1 AND m.left_at IS NULL
+       ORDER BY n.birth_order NULLS LAST, n.full_name`,
+      [nuclearFamilyId]
     );
 
-    const spouseRelationsResult = await pool.query(
-      `SELECT node_a, node_b 
-       FROM spouse_relations 
-       WHERE family_id = $1`,
-      [familyId],
+    const memberRows = membersRes.rows;
+
+    if (memberRows.length === 0) {
+      return NextResponse.json({ nodes: [], edges: [] });
+    }
+
+    const memberIds = memberRows.map((r: any) => r.id);
+    const idToRow = new Map(memberRows.map((r: any) => [r.id.toString(), r]));
+
+    const marriagesRes = await client.query(
+      `SELECT id, husband_node_id, wife_node_id, status
+       FROM marriages
+       WHERE status = 'married'
+         AND (husband_node_id = ANY($1::int[]) OR wife_node_id = ANY($1::int[]))`,
+      [memberIds]
+    );
+
+    const spouseMap = new Map<string, string[]>();
+    marriagesRes.rows.forEach((m: any) => {
+      const h = m.husband_node_id.toString();
+      const w = m.wife_node_id.toString();
+      if (!spouseMap.has(h)) spouseMap.set(h, []);
+      if (!spouseMap.has(w)) spouseMap.set(w, []);
+      if (!spouseMap.get(h)!.includes(w)) spouseMap.get(h)!.push(w);
+      if (!spouseMap.get(w)!.includes(h)) spouseMap.get(w)!.push(h);
+    });
+
+    const pcrRes = await client.query(
+      `SELECT parent_node_id, child_node_id, parent_type
+       FROM parent_child_relations
+       WHERE parent_node_id = ANY($1::int[]) OR child_node_id = ANY($1::int[])`,
+      [memberIds]
     );
 
     const childrenMap = new Map<string, string[]>();
-    nodesResult.rows.forEach((node) => {
-      if (node.father_id) {
-        const key = node.father_id.toString();
-        if (!childrenMap.has(key)) childrenMap.set(key, []);
-        childrenMap.get(key)!.push(node.id.toString());
+    const parentMap = new Map<string, { father?: string; mother?: string }>();
+
+    pcrRes.rows.forEach((r: any) => {
+      const p = r.parent_node_id.toString();
+      const c = r.child_node_id.toString();
+      if (!childrenMap.has(p)) childrenMap.set(p, []);
+      if (!childrenMap.get(p)!.includes(c)) childrenMap.get(p)!.push(c);
+
+      if (!parentMap.has(c)) parentMap.set(c, {});
+      if (r.parent_type === 'father') parentMap.get(c)!.father = p;
+      else parentMap.get(c)!.mother = p;
+    });
+
+    // Simple layout
+    let primaryHusband: string | null = null;
+    let primaryWife: string | null = null;
+
+    for (const row of memberRows) {
+      if (row.role === 'head' && row.gender === 'male') {
+        primaryHusband = row.id.toString();
+        break;
       }
-      if (node.mother_id) {
-        const key = node.mother_id.toString();
-        if (!childrenMap.has(key)) childrenMap.set(key, []);
-        childrenMap.get(key)!.push(node.id.toString());
+    }
+    if (!primaryHusband) {
+      for (const [id, spouses] of spouseMap.entries()) {
+        const row = idToRow.get(id);
+        if (row && row.gender === 'male' && spouses.length > 0) {
+          primaryHusband = id;
+          primaryWife = spouses[0];
+          break;
+        }
       }
+    }
+    if (!primaryHusband && memberRows.length > 0) {
+      primaryHusband = memberRows[0].id.toString();
+    }
+    if (primaryHusband && !primaryWife && spouseMap.has(primaryHusband)) {
+      primaryWife = spouseMap.get(primaryHusband)![0] || null;
+    }
+
+    const nodes = memberRows.map((node: any, idx: number) => {
+      const nodeId = node.id.toString();
+      let x = 120 + (idx % 4) * 160;
+      let y = 80 + Math.floor(idx / 4) * 180;
+
+      if (nodeId === primaryHusband) { x = 80; y = 60; }
+      else if (nodeId === primaryWife) { x = 340; y = 60; }
+      else {
+        const kids = childrenMap.get(primaryHusband || '') || [];
+        const kidIndex = kids.indexOf(nodeId);
+        if (kidIndex >= 0) {
+          x = 60 + kidIndex * 170;
+          y = 240;
+        }
+      }
+
+      if (memberRows.length === 1) { x = 220; y = 120; }
+
+      const fatherId = parentMap.get(nodeId)?.father || null;
+      const motherId = parentMap.get(nodeId)?.mother || null;
+
+      let nasab = null;
+      if (fatherId) {
+        const dad = idToRow.get(fatherId);
+        nasab = `${node.gender === 'male' ? 'Bin' : 'Binti'} ${dad?.full_name || ''}`;
+      }
+
+      return {
+        id: nodeId,
+        type: 'custom',
+        position: { x, y },
+        data: {
+          id: nodeId,
+          family_id: String(nuclearFamilyId),
+          user_id: node.user_id ? String(node.user_id) : null,
+          full_name: node.full_name,
+          gender: node.gender,
+          birth_date: node.birth_date,
+          death_date: node.death_date,
+          photo_url: node.photo_url,
+          is_alive: node.is_alive,
+          nasab_line: nasab,
+          birth_order: node.birth_order,
+          father_id: fatherId,
+          mother_id: motherId,
+          spouse_ids: spouseMap.get(nodeId) || [],
+          children_ids: childrenMap.get(nodeId) || [],
+          invitation_email: null,
+          invitation_status: 'accepted',
+          position_x: x,
+          position_y: y,
+          created_at: node.created_at,
+          updated_at: node.updated_at,
+        },
+      };
     });
-
-    // Normalize and dedupe spouse relations so we don't return duplicates like [3,3]
-    const relationSet = new Set<string>();
-    spouseRelationsResult.rows.forEach((relation) => {
-      const a = Math.min(relation.node_a, relation.node_b);
-      const b = Math.max(relation.node_a, relation.node_b);
-      relationSet.add(`${a}-${b}`);
-    });
-
-    const spouseMap = new Map<number, Set<string>>();
-    relationSet.forEach((key: string) => {
-      const [aStr, bStr] = key.split("-");
-      const a = parseInt(aStr, 10);
-      const b = parseInt(bStr, 10);
-      if (!spouseMap.has(a)) spouseMap.set(a, new Set());
-      if (!spouseMap.has(b)) spouseMap.set(b, new Set());
-      spouseMap.get(a)!.add(b.toString());
-      spouseMap.get(b)!.add(a.toString());
-    });
-
-    // build id -> name map for nasab computation
-    const idToName = new Map<string, string>();
-    nodesResult.rows.forEach((n) => idToName.set(n.id.toString(), n.full_name));
-
-    const nodes = nodesResult.rows.map((node) => ({
-      id: node.id.toString(),
-      type: "custom",
-      position: { x: node.position_x || 0, y: node.position_y || 0 },
-      data: {
-        id: node.id.toString(),
-        family_id: node.family_id,
-        user_id: node.user_id,
-        full_name: node.full_name,
-        gender: node.gender,
-        birth_date: node.birth_date,
-        death_date: node.death_date,
-        photo_url: node.photo_url,
-        is_alive: node.is_alive,
-
-        birth_order: node.birth_order,
-        father_id: node.father_id,
-        mother_id: node.mother_id,
-        // compute nasab_line from father_id only (nasab is father lineage)
-        nasab_line: node.father_id
-          ? `${node.gender === "male" ? "Bin" : "Binti"} ${idToName.get(node.father_id.toString())}`
-          : null,
-        spouse_ids: Array.from(spouseMap.get(node.id) || []),
-        children_ids: childrenMap.get(node.id.toString()) || [],
-        invitation_email: node.invitation_email,
-        invitation_status: node.invitation_status,
-        created_at: node.created_at,
-        updated_at: node.updated_at,
-      },
-    }));
-
-    console.log(
-      "[GET /api/tree] familyId:",
-      familyId,
-      "nodes count:",
-      nodes.length,
-      "sample spouse_ids:",
-      nodes
-        .slice(0, 3)
-        .map((n) => ({ id: n.id, spouse_ids: n.data.spouse_ids })),
-      "childrenMap sample:",
-      Array.from(childrenMap.entries()).slice(0, 5),
-    );
 
     const edges: Edge[] = [];
-    spouseRelationsResult.rows.forEach((relation) => {
-      edges.push({
-        id: `spouse-${relation.node_a}-${relation.node_b}`,
-        source: relation.node_a.toString(),
-        target: relation.node_b.toString(),
-        animated: true,
-        sourceHandle: "right",
-        targetHandle: "left",
-        style: { stroke: "#10b981", strokeWidth: 2 },
-      });
-    });
 
-    // Create edges for both father and mother if they exist
-    nodesResult.rows.forEach((node) => {
-      if (node.father_id) {
+    marriagesRes.rows.forEach((m: any) => {
+      const a = m.husband_node_id.toString();
+      const b = m.wife_node_id.toString();
+      if (idToRow.has(a) && idToRow.has(b)) {
         edges.push({
-          id: `parent-father-${node.father_id}-${node.id}`,
-          source: node.father_id.toString(),
-          target: node.id.toString(),
+          id: `spouse-${a}-${b}`,
+          source: a,
+          target: b,
           animated: true,
-          sourceHandle: "bottom",
-          targetHandle: "top",
-          style: { stroke: "#3b82f6", strokeWidth: 2 },
-        });
-      }
-      if (node.mother_id) {
-        edges.push({
-          id: `parent-mother-${node.mother_id}-${node.id}`,
-          source: node.mother_id.toString(),
-          target: node.id.toString(),
-          animated: true,
-          sourceHandle: "bottom",
-          targetHandle: "top",
-          style: { stroke: "#ec4094", strokeWidth: 2, strokeDasharray: "5 5" },
+          sourceHandle: 'right',
+          targetHandle: 'left',
+          style: { stroke: '#10b981', strokeWidth: 2 },
         });
       }
     });
 
-    return NextResponse.json({ nodes, edges }, { status: 200 });
-  } catch (error) {
-    console.error("Get tree error:", error);
-    return NextResponse.json({ error: "Terjadi kesalahan" }, { status: 500 });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const {
-      family_id,
-      full_name,
-      gender,
-      birth_date,
-      death_date,
-      position_x,
-      position_y,
-      user_id,
-    } = body;
-
-    if (!full_name || !gender) {
-      return NextResponse.json(
-        { error: "full_name dan gender wajib diisi" },
-        { status: 400 },
-      );
-    }
-
-    let targetFamilyId = family_id;
-
-    // If family_id not provided but user_id is, get or create user's family
-    if (!targetFamilyId && user_id) {
-      const memberCheck = await pool.query(
-        "SELECT family_id FROM family_members WHERE user_id = $1 LIMIT 1",
-        [user_id],
-      );
-
-      if (memberCheck.rows.length > 0) {
-        targetFamilyId = memberCheck.rows[0].family_id;
-      } else {
-        // Create a new family for the user
-        const familyResult = await pool.query(
-          `INSERT INTO families (name, created_by, created_at, updated_at)
-           VALUES ($1, $2, NOW(), NOW())
-           RETURNING id`,
-          [`Family ${full_name}`, user_id],
-        );
-        targetFamilyId = familyResult.rows[0].id;
-
-        // Add user as family member
-        await pool.query(
-          `INSERT INTO family_members (family_id, user_id, role, joined_at)
-           VALUES ($1, $2, 'admin', NOW())`,
-          [targetFamilyId, user_id],
-        );
+    pcrRes.rows.forEach((rel: any) => {
+      const p = rel.parent_node_id.toString();
+      const c = rel.child_node_id.toString();
+      if (idToRow.has(p) && idToRow.has(c)) {
+        edges.push({
+          id: `parent-${rel.parent_type}-${p}-${c}`,
+          source: p,
+          target: c,
+          animated: true,
+          sourceHandle: 'bottom',
+          targetHandle: 'top',
+          style: {
+            stroke: rel.parent_type === 'father' ? '#3b82f6' : '#ec4899',
+            strokeWidth: 2,
+          },
+        });
       }
-    }
+    });
 
-    if (!targetFamilyId) {
-      return NextResponse.json(
-        { error: "family_id diperlukan" },
-        { status: 400 },
-      );
-    }
-
-    // Convert to integers where needed
-    const targetFamilyIdInt = parseInt(targetFamilyId, 10);
-    const userIdInt = user_id ? parseInt(user_id, 10) : null;
-
-    const isAlive = !death_date;
-
-    const result = await pool.query(
-      `INSERT INTO family_nodes (family_id, user_id, full_name, gender, birth_date, death_date, 
-                                  is_alive, position_x, position_y, 
-                                  created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-       RETURNING id, family_id, user_id, full_name, gender, birth_date, death_date,
-                   is_alive, position_x, position_y, created_at, updated_at`,
-      [
-        targetFamilyIdInt,
-        userIdInt,
-        full_name,
-        gender,
-        birth_date,
-        death_date,
-        isAlive,
-        position_x || 0,
-        position_y || 0,
-      ],
-    );
-
-    const newNode = result.rows[0];
-
-    return NextResponse.json(
-      {
-        id: newNode.id,
-        family_id: newNode.family_id,
-        user_id: newNode.user_id,
-        full_name: newNode.full_name,
-        gender: newNode.gender,
-        birth_date: newNode.birth_date,
-        death_date: newNode.death_date,
-        photo_url: null,
-        is_alive: newNode.is_alive,
-        nasab_line: null,
-        birth_order: null,
-        father_id: null,
-        mother_id: null,
-        spouse_ids: [],
-        children_ids: [],
-        invitation_email: null,
-        invitation_status: "accepted",
-        position_x: newNode.position_x,
-        position_y: newNode.position_y,
-        created_at: newNode.created_at,
-        updated_at: newNode.updated_at,
-      },
-      { status: 201 },
-    );
+    return NextResponse.json({
+      nodes,
+      edges,
+      family_id: String(nuclearFamilyId),
+      nuclear_family_id: nuclearFamilyId,
+    });
   } catch (error) {
-    console.error("Create node error:", error);
+    console.error('GET /api/tree (new schema) error:', error);
     return NextResponse.json(
-      {
-        error: "Terjadi kesalahan",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: 'Gagal memuat data pohon keluarga' },
       { status: 500 },
     );
+  } finally {
+    client.release();
   }
 }
+
+// =====================================================
+// LEGACY MUTATION ENDPOINTS REMOVED DURING 2026 MIGRATION
+// =====================================================
+// All member creation now uses POST /api/invitations.
+// Old code using family_nodes, spouse_relations, family_members has been deleted.

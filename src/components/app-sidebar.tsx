@@ -25,7 +25,7 @@ const navItems = [
   { href: "/members", icon: Users, label: "Anggota" },
   { href: "/documents", icon: FileText, label: "Dokumen" },
   { href: "/chat", icon: MessageCircle, label: "Chat" },
-  { href: "/dashboard/settings", icon: Settings, label: "Pengaturan" },
+  { href: "/settings", icon: Settings, label: "Pengaturan" },
 ];
 
 export function AppSidebar({ children }: { children: React.ReactNode }) {
@@ -34,6 +34,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   const { logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
+  const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -76,6 +77,31 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     };
 
     fetchUnreadStatus();
+  }, []);
+
+  // Fetch pending family invitations (for red dot on Pohon Keluarga)
+  useEffect(() => {
+    const fetchPendingInvitations = async () => {
+      try {
+        const res = await apiFetch("/api/invitations?status=pending");
+        if (!res.ok) return;
+
+        const data = await res.json();
+        setHasPendingInvitation((data.invitations || []).length > 0);
+      } catch {
+        // Fail silently — this is just a visual indicator
+      }
+    };
+
+    fetchPendingInvitations();
+
+    // Listen for updates from Tree page (when user accepts invitation)
+    const handler = () => fetchPendingInvitations();
+    window.addEventListener('invitations-updated', handler);
+
+    return () => {
+      window.removeEventListener('invitations-updated', handler);
+    };
   }, []);
 
   return (
@@ -158,6 +184,11 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
                   {item.href === "/chat" && hasUnreadChat && (
                     <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
                   )}
+
+                  {/* Red dot indicator for pending family invitations */}
+                  {item.href === "/tree" && hasPendingInvitation && (
+                    <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+                  )}
                 </Link>
               ))}
             </div>
@@ -189,6 +220,11 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
                   {/* Red dot indicator for unread messages in Chat (mobile) */}
                   {item.href === "/chat" && hasUnreadChat && (
+                    <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+                  )}
+
+                  {/* Red dot indicator for pending family invitations (mobile) */}
+                  {item.href === "/tree" && hasPendingInvitation && (
                     <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
                   )}
                 </Link>

@@ -25,6 +25,7 @@ interface UseFamilyTreeReturn {
   isLoading: boolean;
   familyId: string | null;
   familyUuid: string | null;
+  currentUserNodeUuid: string | null;
   setConnectionMode: (mode: ConnectionMode) => void;
   openModal: () => void;
   closeModal: () => void;
@@ -52,6 +53,7 @@ export function useFamilyTree(): UseFamilyTreeReturn {
     const [isLoading, setIsLoading] = useState(false);
     const [familyId, setFamilyId] = useState<string | null>(null);
     const [familyUuid, setFamilyUuid] = useState<string | null>(null);
+    const [currentUserNodeUuid, setCurrentUserNodeUuid] = useState<string | null>(null);
     const { user } = useAuth();
 
   const openModal = useCallback(() => setIsModalOpen(true), []);
@@ -166,8 +168,15 @@ export function useFamilyTree(): UseFamilyTreeReturn {
       const response = await fetch(`/api/tree/me?user_id=${userId}`);
       const data = await response.json();
       
-      if (data.node) {
-        const fid = String(data.node.family_id);
+      const hasNode = !!data.node;
+      let fid = data.family_id ? String(data.family_id) : null;
+
+      if (data.node_uuid) {
+        setCurrentUserNodeUuid(data.node_uuid);
+      }
+
+      if (hasNode && fid && fid !== 'null' && fid !== 'undefined') {
+        // Normal path: user has a nuclear family
         const treeResponse = await fetch(`/api/tree?family_id=${fid}`);
         const treeData = await treeResponse.json();
         
@@ -184,24 +193,58 @@ export function useFamilyTree(): UseFamilyTreeReturn {
             }
           } catch {}
         }
-      } else if (data.family_id) {
-        const fid = String(data.family_id);
-        const treeResponse = await fetch(`/api/tree?family_id=${fid}`);
-        const treeData = await treeResponse.json();
-        
-        if (treeData.nodes && treeData.edges) {
-          setFamilyId(fid);
-          setNodes(treeData.nodes);
-          setEdges(treeData.edges);
-
-          try {
-            const famRes = await fetch(`/api/family?id=${fid}`);
-            if (famRes.ok) {
-              const famData = await famRes.json();
-              if (famData.uuid) setFamilyUuid(famData.uuid);
-            }
-          } catch {}
-        }
+      } else if (hasNode) {
+        // User has a node but no current nuclear family yet (e.g. child invited only by mother)
+        // Show at least the user as a standalone node so the page is usable
+        const n = data.node;
+        const single: any = {
+          id: String(n.id),
+          type: 'custom',
+          position: { x: 220, y: 140 },
+          data: {
+            ...n,
+            family_id: null,
+            spouse_ids: [],
+            children_ids: [],
+            father_id: null,
+            mother_id: null,
+            nasab_line: null,
+          },
+        };
+        setNodes([single]);
+        setEdges([]);
+        setFamilyId(null);
+        setFamilyUuid(null);
+      } else {
+        // No node at all (edge case) - create a placeholder from the logged-in user info
+        const placeholderId = 'me-' + userId;
+        const placeholder = {
+          id: placeholderId,
+          type: 'custom',
+          position: { x: 220, y: 140 },
+          data: {
+            id: placeholderId,
+            family_id: null,
+            user_id: userId,
+            full_name: fullName,
+            gender,
+            birth_date: birthDate,
+            is_alive: true,
+            spouse_ids: [],
+            children_ids: [],
+            father_id: null,
+            mother_id: null,
+            nasab_line: null,
+            invitation_status: 'accepted',
+            position_x: 220,
+            position_y: 140,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        };
+        setNodes([placeholder as any]);
+        setEdges([]);
+        setFamilyId(null);
       }
     } catch (error) {
       console.error('Load user node error:', error);
@@ -216,25 +259,12 @@ export function useFamilyTree(): UseFamilyTreeReturn {
     setEdges((prev) => applyEdgeChanges(changes, prev));
   }, []);
 
-  const deleteEdge = useCallback(async (nodeA: string, nodeB: string, type: 'spouse' | 'child') => {
-    try {
-      await fetch(`/api/tree/edge`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ node_a: nodeA, node_b: nodeB, type })
-      });
-      if (familyId) {
-        const response = await fetch(`/api/tree?family_id=${familyId}`);
-        const data = await response.json();
-        if (data.nodes && data.edges) {
-          setNodes(data.nodes);
-          setEdges(data.edges);
-        }
-      }
-    } catch (error) {
-      console.error('Delete edge error:', error);
-    }
-  }, [familyId, setNodes, setEdges]);
+  const deleteEdge = useCallback(async (_nodeA: string, _nodeB: string, _type: 'spouse' | 'child') => {
+    // Legacy endpoint removed during 2026 schema migration.
+    // Canvas editing (connect/delete between existing nodes) is temporarily disabled.
+    console.warn('[Tree] deleteEdge is disabled during new schema migration.');
+    alert('Fitur hapus relasi antar node sedang dalam pengembangan ulang untuk schema baru.');
+  }, []);
 
   const savePosition = useCallback(async (nodeId: string, position: { x: number; y: number }) => {
     try {
@@ -249,27 +279,31 @@ export function useFamilyTree(): UseFamilyTreeReturn {
   }, []);
 
   const connectSpouse = useCallback(async (nodeAId: string, nodeBId: string) => {
-    if (!familyId) return;
     try {
-      const response = await fetch(`/api/tree/${nodeAId}/connect`, {
+      const response = await fetch(`/api/tree/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_id: nodeBId, type: 'spouse', family_id: familyId })
+        body: JSON.stringify({ type: 'spouse', node_a_id: nodeAId, node_b_id: nodeBId })
       });
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to connect spouse');
+        const err = await response.json();
+        alert(err.error || 'Gagal menghubungkan sebagai pasangan');
+        return;
       }
-      console.log('[connectSpouse] success, refetching tree...');
-      const treeResponse = await fetch(`/api/tree?family_id=${familyId}`);
-      const data = await treeResponse.json();
-      console.log('[connectSpouse] fetched nodes:', data.nodes?.length, 'first node spouse_ids:', data.nodes?.[0]?.spouse_ids);
-      if (data.nodes && data.edges) {
-        setNodes(data.nodes);
-        setEdges(data.edges);
+
+      // Refetch current family tree
+      if (familyId) {
+        const treeRes = await fetch(`/api/tree?family_id=${familyId}`);
+        const treeData = await treeRes.json();
+        if (treeData.nodes && treeData.edges) {
+          setNodes(treeData.nodes);
+          setEdges(treeData.edges);
+        }
       }
     } catch (error) {
       console.error('Connect spouse error:', error);
+      alert('Terjadi kesalahan saat menghubungkan pasangan');
     }
   }, [familyId, setNodes, setEdges]);
 
@@ -286,66 +320,31 @@ export function useFamilyTree(): UseFamilyTreeReturn {
   }, [nodes, addNode]);
 
   const connectChild = useCallback(async (parentId: string, childId: string) => {
-    if (!familyId) return;
     try {
-      const body = { target_id: childId, type: 'child', family_id: familyId };
-      console.log('[connectChild] POST body:', { parentId, childId, body });
-
-      const response = await fetch(`/api/tree/${parentId}/connect`, {
+      const response = await fetch(`/api/tree/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ type: 'child', parent_id: parentId, child_id: childId })
       });
-
-      const respJson = await response.json().catch(() => null);
-      console.log('[connectChild] POST response status, json:', response.status, respJson);
 
       if (!response.ok) {
-        throw new Error(respJson?.error || 'Failed to connect child');
+        const err = await response.json();
+        alert(err.error || 'Gagal menambahkan sebagai anak');
+        return;
       }
 
-      console.log('[connectChild] server ok, parentId, childId:', parentId, childId);
-
-      // Optimistically update local state so parent shows child immediately
-      setNodes((prev) => {
-        const parent = prev.find((n) => n.id === parentId);
-        const child = prev.find((n) => n.id === childId);
-        const parentGender = parent?.data.gender;
-
-        console.log('[connectChild] parent found, gender:', parentGender);
-
-        return prev.map((n) => {
-          if (n.id === parentId) {
-            const existing = Array.isArray(n.data.children_ids) ? n.data.children_ids : [];
-            const dedup = existing.includes(childId) ? existing : [...existing, childId];
-            return {
-              ...n,
-              data: { ...n.data, children_ids: dedup }
-            };
-          }
-
-          if (n.id === childId) {
-            const updatedChildData = { ...n.data } as any;
-            if (parentGender === 'male') updatedChildData.father_id = parentId;
-            if (parentGender === 'female') updatedChildData.mother_id = parentId;
-            return { ...n, data: updatedChildData } as Node<FamilyNodeData>;
-          }
-
-          return n;
-        });
-      });
-
-      // refetch authoritative tree to ensure consistency
-      const treeResponse = await fetch(`/api/tree?family_id=${familyId}`);
-      const data = await treeResponse.json();
-      console.log('[connectChild] fetched tree full response:', data);
-      console.log('[connectChild] fetched tree nodes sample:', data.nodes?.slice(0,5).map((n:any)=>({ id: n.id, children_ids: n.data?.children_ids })));
-      if (data.nodes && data.edges) {
-        setNodes(data.nodes);
-        setEdges(data.edges);
+      // Refetch tree after successful connection
+      if (familyId) {
+        const treeRes = await fetch(`/api/tree?family_id=${familyId}`);
+        const treeData = await treeRes.json();
+        if (treeData.nodes && treeData.edges) {
+          setNodes(treeData.nodes);
+          setEdges(treeData.edges);
+        }
       }
     } catch (error) {
       console.error('Connect child error:', error);
+      alert('Terjadi kesalahan saat menghubungkan anak');
     }
   }, [familyId, setNodes, setEdges]);
 
@@ -380,28 +379,11 @@ export function useFamilyTree(): UseFamilyTreeReturn {
     }
   }, [nodes, user?.id, familyId, setNodes, setEdges]);
 
-  const reinviteNode = useCallback(async (id: string) => {
-    const node = nodes.find(n => n.id === id);
-    if (!node?.data.invitation_email) return;
-
-    try {
-      await fetch(`/api/tree/${id}/invite`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: node.data.invitation_email, family_id: familyId })
-      });
-      if (familyId) {
-        const response = await fetch(`/api/tree?family_id=${familyId}`);
-        const data = await response.json();
-        if (data.nodes && data.edges) {
-          setNodes(data.nodes);
-          setEdges(data.edges);
-        }
-      }
-    } catch (error) {
-      console.error('Reinvite error:', error);
-    }
-  }, [nodes, familyId, setNodes, setEdges]);
+  const reinviteNode = useCallback(async (_id: string) => {
+    // Legacy reinvite removed during schema migration.
+    console.warn('[Tree] reinviteNode is disabled.');
+    alert('Fitur kirim ulang undangan node lama sudah tidak tersedia. Gunakan tombol Tambah Anggota untuk mengundang ulang.');
+  }, []);
 
   return {
     nodes,
@@ -414,6 +396,7 @@ export function useFamilyTree(): UseFamilyTreeReturn {
     isLoading,
     familyId,
     familyUuid,
+    currentUserNodeUuid,
     setConnectionMode,
     openModal,
     closeModal,

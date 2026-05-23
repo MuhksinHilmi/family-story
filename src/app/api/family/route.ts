@@ -9,18 +9,49 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'id diperlukan' }, { status: 400 });
   }
 
+  const fid = parseInt(id, 10);
+  if (isNaN(fid)) {
+    return NextResponse.json({ error: 'id tidak valid' }, { status: 400 });
+  }
+
   try {
-    const result = await pool.query(
-      'SELECT id, uuid, name, description, created_by, created_at, updated_at FROM families WHERE id = $1',
-      [parseInt(id, 10)]
+    // Try new nuclear_families first (the active schema)
+    let result = await pool.query(
+      `SELECT id, uuid, name, status, created_by_node_id as created_by, created_at, updated_at 
+       FROM nuclear_families 
+       WHERE id = $1`,
+      [fid]
     );
+
+    if (result.rows.length === 0) {
+      // Fallback to old families table if it still exists (for transition)
+      try {
+        result = await pool.query(
+          'SELECT id, uuid, name, description, created_by, created_at, updated_at FROM families WHERE id = $1',
+          [fid]
+        );
+      } catch {
+        // table may not exist
+      }
+    }
 
     if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Family tidak ditemukan' }, { status: 404 });
     }
 
-    return NextResponse.json(result.rows[0], { status: 200 });
+    const row = result.rows[0];
+    return NextResponse.json({
+      id: row.id,
+      uuid: row.uuid,
+      name: row.name,
+      description: row.description || null,
+      created_by: row.created_by,
+      status: row.status || 'active',
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    }, { status: 200 });
   } catch (error) {
+    console.error('/api/family error:', error);
     return NextResponse.json({ error: 'Terjadi kesalahan' }, { status: 500 });
   }
 }

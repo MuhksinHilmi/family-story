@@ -78,18 +78,25 @@ export interface Invite {
   created_at: string;
 }
 
-export interface Document {
+export type DocumentVisibility = 'private' | 'family' | 'small_family' | 'specific_users';
+
+export interface FamilyDocument {
   id: string;
-  family_id: string;
-  uploaded_by: string;
-  document_type: 'kk' | 'ktp' | 'akta_nikah' | 'akta_lahir' | 'lainnya';
-  file_name: string;
-  file_path: string;
+  family_uuid: string;
+  uploaded_by: number;         // integer user id (references users.id)
+  file_name: string;           // sanitized filename
+  original_name: string;
+  file_path: string;           // e.g. uploads/documents/{family_uuid}/{user_id}/file.pdf
   file_size: number;
   mime_type: string;
-  visibility: 'family' | 'admin_only';
-  description?: string;
+
+  visibility_scope: DocumentVisibility;
+  small_family_uuid?: string | null;
+  recipient_user_ids?: string[] | null;
+
+  description?: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ChatRoom {

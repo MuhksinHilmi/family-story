@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const joinFamilyUuid = searchParams.get('join');
+  const inviteToken = searchParams.get('invite');
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -22,6 +23,31 @@ function RegisterForm() {
     birth_date: '',
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [invitationData, setInvitationData] = useState<any>(null);
+  const [genderLocked, setGenderLocked] = useState(false);
+
+  // Fetch invitation details if coming from invite link
+  useEffect(() => {
+    if (inviteToken) {
+      fetch(`/api/invitations?token=${inviteToken}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.invitation) {
+            setInvitationData(data.invitation);
+
+            // Lock gender for spouse invitation
+            if (data.invitation.relationship_type === 'spouse' && data.invitation.inviter?.gender) {
+              const forcedGender = data.invitation.inviter.gender === 'male' ? 'female' : 'male';
+              setFormData(prev => ({ ...prev, gender: forcedGender }));
+              setGenderLocked(true);
+            }
+          }
+        })
+        .catch(() => {
+          // ignore fetch error, user can still register normally
+        });
+    }
+  }, [inviteToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +56,9 @@ function RegisterForm() {
       const payload: any = { ...formData };
       if (joinFamilyUuid) {
         payload.family_uuid = joinFamilyUuid;
+      }
+      if (inviteToken) {
+        payload.invite_token = inviteToken;
       }
 
       const response = await fetch('/api/auth/register', {
@@ -61,15 +90,27 @@ function RegisterForm() {
           <div>
             <CardTitle className="text-[#3B2F1E]">Daftar</CardTitle>
             <CardDescription>
-              {joinFamilyUuid
-                ? "Bergabung ke keluarga melalui link undangan."
-                : "Buat akun Cerita Keluarga Anda"}
+              {inviteToken
+                ? "Anda diundang untuk bergabung melalui undangan."
+                : joinFamilyUuid
+                  ? "Bergabung ke keluarga melalui link undangan."
+                  : "Buat akun Cerita Keluarga Anda"}
             </CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+         {invitationData && (
+           <div className="bg-[#E8F0E8] border border-[#A8C5A8] rounded-md p-3 text-sm text-[#2E5239]">
+             Anda diundang sebagai <strong>{invitationData.relationship_type === 'spouse' ? 'pasangan' : 'anak'}</strong> oleh{' '}
+             <strong>{invitationData.inviter?.full_name}</strong>.
+             {invitationData.relationship_type === 'spouse' && (
+               <span className="block mt-1 text-xs">Jenis kelamin Anda telah dikunci sesuai undangan.</span>
+             )}
+           </div>
+         )}
+
+         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="full_name" className="text-sm font-medium text-[#3B2F1E]">Nama Lengkap</Label>
             <Input
@@ -104,13 +145,14 @@ function RegisterForm() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="gender" className="text-sm font-medium text-[#3B2F1E]">Jenis Kelamin</Label>
-            <select
-              id="gender"
-              value={formData.gender}
-              onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-              required
-              className="flex h-10 w-full rounded-md border border-[#D4C4A8] bg-[#EDE4D3] px-3 py-2 text-base text-[#3B2F1E] ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A7C59] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
+             <select
+               id="gender"
+               value={formData.gender}
+               onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+               required
+               disabled={genderLocked}
+               className="flex h-10 w-full rounded-md border border-[#D4C4A8] bg-[#EDE4D3] px-3 py-2 text-base text-[#3B2F1E] ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A7C59] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+             >
               <option value="">Pilih jenis kelamin</option>
               <option value="male">Laki-laki</option>
               <option value="female">Perempuan</option>
@@ -133,9 +175,11 @@ function RegisterForm() {
           >
             {isLoading
               ? 'Memproses...'
-              : joinFamilyUuid
-                ? 'Daftar & Bergabung ke Keluarga'
-                : 'Daftar'}
+              : inviteToken
+                ? 'Daftar & Klaim Undangan'
+                : joinFamilyUuid
+                  ? 'Daftar & Bergabung ke Keluarga'
+                  : 'Daftar'}
           </Button>
         </form>
         <div className="mt-5 pt-4 border-t border-[#D4C4A8] text-center">

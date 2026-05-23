@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('user_id');
-    const familyId = searchParams.get('family_id');
 
     if (!userId) {
       return NextResponse.json(
@@ -15,7 +14,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Convert userId to integer
     const userIdInt = parseInt(userId, 10);
     if (isNaN(userIdInt)) {
       return NextResponse.json(
@@ -23,74 +21,74 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-    
-    // First, get user's family membership
-    let userFamilyId = null;
-    try {
-      const memberResult = await client.query(
-        `SELECT family_id FROM family_members WHERE user_id = $1 LIMIT 1`,
-        [userIdInt]
-      );
-      if (memberResult.rows.length > 0) {
-        userFamilyId = memberResult.rows[0].family_id;
-      }
-    } catch (e) {
-      console.error('Family member query error:', e);
+
+    // Find the user's primary node in the new schema
+    const nodeRes = await client.query(
+      `SELECT 
+         n.id, 
+         n.uuid,
+         n.user_id, 
+         n.full_name, 
+         n.gender, 
+         n.birth_date, 
+         n.death_date, 
+         n.photo_url,
+         n.is_alive, 
+         n.current_nuclear_family_id,
+         n.current_marriage_id,
+         n.created_at, 
+         n.updated_at,
+         u.photo_url as user_photo_url
+       FROM nodes n
+       LEFT JOIN users u ON n.user_id = u.id
+       WHERE n.user_id = $1
+       LIMIT 1`,
+      [userIdInt]
+    );
+
+    if (nodeRes.rows.length === 0) {
+      // No node yet (should not happen after registration, but handle gracefully)
+      return NextResponse.json({ 
+        node: null, 
+        family_id: null,
+        message: 'User belum memiliki node di sistem baru. Silakan hubungi admin atau coba register ulang.'
+      }, { status: 200 });
     }
 
-    let query = `SELECT 
-                   fn.id, fn.family_id, fn.user_id, fn.full_name, fn.gender, fn.birth_date, fn.death_date, 
-                   COALESCE(u.photo_url, fn.photo_url) AS photo_url,
-                   fn.is_alive, fn.nasab_line, fn.birth_order, fn.father_id, fn.mother_id,
-                   fn.position_x, fn.position_y, fn.invitation_email, fn.invitation_status, 
-                   fn.created_at, fn.updated_at
-                 FROM family_nodes fn
-                 LEFT JOIN users u ON fn.user_id = u.id
-                 WHERE fn.user_id = $1`;
-    
-    const params: unknown[] = [userIdInt];
+    const node = nodeRes.rows[0];
+    const familyId = node.current_nuclear_family_id ? String(node.current_nuclear_family_id) : null;
 
-    if (familyId) {
-      query += ` AND family_id = $2`;
-      params.push(familyId);
-    }
-
-    const result = await client.query(query, params);
-
-    if (result.rows.length === 0) {
-      // Return default family_id 1 if user has no family yet (will be created on node creation)
-      return NextResponse.json({ node: null, family_id: userFamilyId || '1' }, { status: 200 });
-    }
-
-    const node = result.rows[0];
+    // Map to the shape expected by the legacy frontend (many fields will be enriched by the main /api/tree load)
     return NextResponse.json({
       node: {
         id: node.id,
-        family_id: node.family_id,
+        // Use nuclear_family id as the "family_id" for compatibility with existing hook calls
+        family_id: familyId,
         user_id: node.user_id,
         full_name: node.full_name,
         gender: node.gender,
         birth_date: node.birth_date,
         death_date: node.death_date,
-        photo_url: node.photo_url,
+        photo_url: node.user_photo_url || node.photo_url,
         is_alive: node.is_alive,
-        nasab_line: node.nasab_line,
-        birth_order: node.birth_order,
-        father_id: node.father_id,
-        mother_id: node.mother_id,
+        nasab_line: null, // not used in new schema
+        father_id: null,  // will be computed from parent_child_relations in tree load
+        mother_id: null,
         spouse_ids: [],
         children_ids: [],
-        invitation_email: node.invitation_email,
-        invitation_status: node.invitation_status,
-        position_x: node.position_x,
-        position_y: node.position_y,
+        invitation_email: null,
+        invitation_status: 'accepted', // if they have a node, they are claimed
+        position_x: 0,
+        position_y: 0,
         created_at: node.created_at,
         updated_at: node.updated_at,
       },
-      family_id: userFamilyId
+      family_id: familyId,
+      node_uuid: node.uuid,
+      nuclear_family_id: node.current_nuclear_family_id,
     }, { status: 200 });
   } catch (error) {
-    console.error('Get node by user error:', error);
+    console.error('Get node by user (new schema) error:', error);
     return NextResponse.json(
       { error: 'Terjadi kesalahan', details: String(error) },
       { status: 500 }

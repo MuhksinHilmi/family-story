@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 interface AddNodeModalProps {
   open: boolean;
   onClose: () => void;
-  onInvite: (email: string, fullName: string, gender: 'male' | 'female', phone?: string) => void;
+  onInvite: (email: string, fullName: string, gender: 'male' | 'female', phone: string | undefined, relationshipType: 'spouse' | 'child') => void;
   title?: string;
 }
 
@@ -18,9 +18,9 @@ export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota'
     gender: 'male' as 'male' | 'female',
     phone: '',
   });
-  const [errors, setErrors] = useState<{ email?: string; phone?: string }>({});
+  const [relationshipType, setRelationshipType] = useState<'spouse' | 'child'>('child');
+  const [errors, setErrors] = useState<{ email?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -30,46 +30,21 @@ export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota'
         gender: 'male',
         phone: '',
       });
+      setRelationshipType('child');
       setErrors({});
     }
   }, [open]);
 
-  const validateField = async (field: 'email' | 'phone', value: string) => {
-    if (!value) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-      return true;
-    }
-
-    setIsValidating(true);
-    try {
-      const response = await fetch(`/api/tree/validate?email=${encodeURIComponent(value)}${field === 'phone' && value ? `&phone=${encodeURIComponent(value)}` : ''}`);
-      const data = await response.json();
-
-      if (field === 'email' && data.emailExists) {
-        setErrors(prev => ({ ...prev, email: 'Email sudah terdaftar atau sedang diundang' }));
-        return false;
-      }
-      if (field === 'phone' && data.phoneExists) {
-        setErrors(prev => ({ ...prev, phone: 'Nomor HP sudah terdaftar' }));
-        return false;
-      }
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-      return true;
-    } catch {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-      return true;
-    } finally {
-      setIsValidating(false);
-    }
-  };
+  // Note: Real-time duplicate check against old family_nodes removed during legacy cleanup.
+  // New invitations go through /api/invitations which has its own validation for existing users.
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.invitation_email || !formData.full_name) return;
-    if (errors.email || errors.phone) return;
+    if (errors.email) return;
     setIsLoading(true);
     setTimeout(() => {
-      onInvite(formData.invitation_email, formData.full_name, formData.gender, formData.phone || undefined);
+      onInvite(formData.invitation_email, formData.full_name, formData.gender, formData.phone || undefined, relationshipType);
       setIsLoading(false);
     }, 500);
   };
@@ -92,6 +67,37 @@ export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota'
           </div>
 
           <div className="space-y-2">
+            <Label>Undang sebagai</Label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="relationship"
+                  value="child"
+                  checked={relationshipType === 'child'}
+                  onChange={() => setRelationshipType('child')}
+                />
+                <span>Saya sebagai Orang Tua</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="relationship"
+                  value="spouse"
+                  checked={relationshipType === 'spouse'}
+                  onChange={() => setRelationshipType('spouse')}
+                />
+                <span>Pasangan saya</span>
+              </label>
+            </div>
+            <p className="text-xs text-[#6B5F4D]">
+              {relationshipType === 'spouse' 
+                ? 'Jenis kelamin akan dikunci berlawanan saat pendaftaran.' 
+                : 'Anak akan ditambahkan ke keluarga nuklir Anda (aturan ayah sebagai pemilik).'}
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="invitation_email">Email</Label>
             <Input
               id="invitation_email"
@@ -100,7 +106,7 @@ export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota'
               value={formData.invitation_email}
               onChange={(e) => {
                 setFormData({ ...formData, invitation_email: e.target.value });
-                if (e.target.value) validateField('email', e.target.value);
+                if (errors.email) setErrors(prev => ({ ...prev, email: undefined }));
               }}
               required
               aria-invalid={!!errors.email}
@@ -141,20 +147,17 @@ export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota'
               type="tel"
               placeholder="081234567890"
               value={formData.phone}
-              onChange={(e) => {
-                setFormData({ ...formData, phone: e.target.value });
-                if (e.target.value) validateField('phone', e.target.value);
-              }}
-              aria-invalid={!!errors.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              aria-invalid={false}
             />
-            {errors.phone && <p className="text-sm text-red-500">{errors.phone}</p>}
+
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" disabled={isLoading || isValidating || !!errors.email || !!errors.phone}>
+            <Button type="submit" disabled={isLoading || !!errors.email}>
               {isLoading ? 'Memproses...' : 'Kirim Undangan'}
             </Button>
           </DialogFooter>
