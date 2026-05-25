@@ -12,10 +12,10 @@ export async function POST(request: NextRequest) {
   const { userId } = auth;
 
   const body = await request.json();
-  const { token } = body;
+  const { invitation_id, token } = body;
 
-  if (!token) {
-    return NextResponse.json({ error: 'Token undangan diperlukan' }, { status: 400 });
+  if (!invitation_id && !token) {
+    return NextResponse.json({ error: 'invitation_id atau token undangan diperlukan' }, { status: 400 });
   }
 
   const client = await pool.connect();
@@ -29,13 +29,23 @@ export async function POST(request: NextRequest) {
     const nodesRes = await client.query('SELECT id FROM nodes WHERE user_id = $1', [userId]);
     const userNodeIds = nodesRes.rows.map((r: any) => r.id);
 
-    // Cari undangan berdasarkan token
-    const invitationRes = await client.query(
-      `SELECT id, status, invitee_node_id, invitee_email 
-       FROM invitations 
-       WHERE token = $1`,
-      [token]
-    );
+    // Cari undangan berdasarkan invitation_id (untuk UUID invite) atau token (legacy share link)
+    let invitationRes;
+    if (invitation_id) {
+      invitationRes = await client.query(
+        `SELECT id, status, invitee_node_id, invitee_email 
+         FROM invitations 
+         WHERE id = $1`,
+        [invitation_id]
+      );
+    } else {
+      invitationRes = await client.query(
+        `SELECT id, status, invitee_node_id, invitee_email 
+         FROM invitations 
+         WHERE token = $1`,
+        [token]
+      );
+    }
 
     if (invitationRes.rows.length === 0) {
       return NextResponse.json({ error: 'Undangan tidak ditemukan' }, { status: 404 });

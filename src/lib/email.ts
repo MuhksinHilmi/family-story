@@ -70,16 +70,28 @@ export async function sendActivationLink(to: string, token: string): Promise<boo
 }
 
 export async function sendInvitationLink(to: string, token: string): Promise<boolean> {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const link = `${baseUrl}/auth/register?invite=${token}`;
+
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
-      <h2>Anda diundang untuk bergabung</h2>
-      <p>Klik link berikut untuk melihat undangan dan bergabung ke pohon keluarga:</p>
-      <a href="${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/invitations/${token}" 
-         style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
-        Lihat Undangan
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto;">
+      <h2 style="color: #3B2F1E;">Anda Diundang Bergabung ke Pohon Keluarga</h2>
+      <p>Seseorang telah mengundang Anda untuk bergabung dalam pohon keluarga melalui <strong>Cerita Keluarga</strong>.</p>
+      <p>Klik tombol di bawah untuk mendaftar dan mengklaim undangan ini:</p>
+      
+      <a href="${link}" 
+         style="display: inline-block; background: #4A7C59; color: white; padding: 12px 28px; 
+                text-decoration: none; border-radius: 6px; font-weight: 500; margin: 12px 0;">
+        Terima Undangan & Daftar
       </a>
-      <p>Link ini berlaku selama 7 hari.</p>
+
+      <p style="font-size: 13px; color: #666;">
+        Link ini berlaku selama 7 hari dan hanya dapat digunakan sekali.
+      </p>
+      <p style="font-size: 12px; color: #888;">
+        Jika Anda tidak merasa diundang, abaikan email ini.
+      </p>
     </div>
   `;
-  return sendEmail(to, 'Undangan - Cerita Keluarga', html);
+  return sendEmail(to, 'Undangan Bergabung - Cerita Keluarga', html);
 }

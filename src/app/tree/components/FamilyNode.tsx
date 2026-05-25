@@ -2,16 +2,19 @@ import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { FamilyNodeData } from '@/types';
 import { cn } from '@/lib/utils';
-import { Info } from 'lucide-react';
+import { Info, RefreshCw } from 'lucide-react';
 
 interface FamilyNodeProps {
   data: FamilyNodeData;
   selected: boolean;
   onInfoClick?: (nodeId: string) => void;
   onStartConnection?: (nodeId: string) => void;
+  onReload?: (nodeId: string) => void;
+  showReloadButton?: boolean;
+  isReloading?: boolean;
 }
 
-export const FamilyNode = memo(({ data, selected, onInfoClick, onStartConnection }: FamilyNodeProps) => {
+export const FamilyNode = memo(({ data, selected, onInfoClick, onStartConnection, onReload, showReloadButton, isReloading }: FamilyNodeProps) => {
   const isDeceased = data.is_alive === false;
   const isPending = data.invitation_status === 'pending';
   const isSelected = selected;
@@ -49,14 +52,37 @@ export const FamilyNode = memo(({ data, selected, onInfoClick, onStartConnection
           <span className="animate-pulse w-3 h-3 rounded-full bg-[#4A7C59] ring-2 ring-white absolute -top-1 -right-1 z-10" />
         )}
 
-        {/* Info button - top left */}
+        {/* Reload button - top right (outside, only when needed) */}
+        {showReloadButton && onReload && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReload(data.id);
+            }}
+            disabled={isReloading}
+            className="absolute -top-2 -right-2 w-6 h-6 bg-white shadow-sm border border-[#D4C4A8] hover:bg-[#F5F0E8] rounded-full flex items-center justify-center transition-colors z-10 disabled:opacity-70"
+            title={isReloading ? "Memuat..." : "Muat relasi tambahan"}
+          >
+            {isReloading ? (
+              <div className="w-3.5 h-3.5 border-2 border-[#4A7C59] border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5 text-[#4A7C59]" />
+            )}
+          </button>
+        )}
+
+        {/* Info button - INSIDE the node, top-left (away from reload on right) */}
         <button
           type="button"
-          onClick={() => onInfoClick?.(data.id)}
-          className="absolute -top-2 -left-2 w-6 h-6 bg-white shadow-sm border border-[#D4C4A8] hover:bg-[#F5F0E8] rounded-full flex items-center justify-center transition-colors z-10"
+          onClick={(e) => {
+            e.stopPropagation();
+            onInfoClick?.(data.id);
+          }}
+          className="absolute top-1.5 left-1.5 w-5 h-5 bg-white/90 shadow-sm border border-[#D4C4A8] hover:bg-white rounded-full flex items-center justify-center transition-colors z-10"
           title="Info"
         >
-          <Info className="h-3.5 w-3.5 text-[#6B5B45]" />
+          <Info className="h-3 w-3 text-[#6B5B45]" />
         </button>
 
         {/* Avatar - larger with gender ring */}
@@ -86,21 +112,19 @@ export const FamilyNode = memo(({ data, selected, onInfoClick, onStartConnection
           {data.full_name}
         </div>
 
-        {/* Nasab line with highlighted prefix */}
+        {/* Nasab line: "binti/bin" tegak, nama ayah (depan saja) italic */}
         {data.nasab_line && (
-          <div className="text-[10px] italic text-[#A07850] text-center truncate w-full px-1 mt-0.5">
-            {data.nasab_line.toLowerCase().startsWith('bin') ? (
+          <div className="text-[10px] text-[#A07850] text-center truncate w-full px-1 mt-0.5">
+            {data.gender === 'male' ? (
               <>
                 <span className="not-italic font-medium text-[#4A7C59]">bin </span>
-                {data.nasab_line.replace(/^bin\s*/i, '')}
-              </>
-            ) : data.nasab_line.toLowerCase().startsWith('binti') ? (
-              <>
-                <span className="not-italic font-medium text-[#4A7C59]">binti </span>
-                {data.nasab_line.replace(/^binti\s*/i, '')}
+                <span className="italic">{data.nasab_line.replace(/^bin\s*/i, '')}</span>
               </>
             ) : (
-              data.nasab_line
+              <>
+                <span className="not-italic font-medium text-[#4A7C59]">binti </span>
+                <span className="italic">{data.nasab_line.replace(/^binti\s*/i, '')}</span>
+              </>
             )}
           </div>
         )}

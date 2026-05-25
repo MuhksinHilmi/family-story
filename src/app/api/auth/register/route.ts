@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db_helper';
 import { sendActivationLink } from '@/lib/email';
 import { randomBytes, randomUUID } from 'crypto';
+import { 
+  mergeExtendedGroupsOnMarriage,
+  linkNodeToRelativeExtendedGroups 
+} from '@/lib/family/extended-groups';
 
 export async function POST(request: NextRequest) {
   const client = await pool.connect();
@@ -174,6 +178,9 @@ export async function POST(request: NextRequest) {
            ON CONFLICT (nuclear_family_id, node_id) DO NOTHING`,
           [familyId, wifeNodeId]
         );
+
+        // A4: Extended Family Group untuk jalur registrasi via email invite (new user)
+        await mergeExtendedGroupsOnMarriage(client, husbandNodeId, wifeNodeId);
       }
 
       if (relationshipType === 'child') {
@@ -186,6 +193,22 @@ export async function POST(request: NextRequest) {
           `INSERT INTO parent_child_relations (parent_node_id, child_node_id, parent_type, created_at)
            VALUES ($1, $2, $3, NOW())`,
           [parentNodeId, newNodeId, parentType]
+        );
+
+        // A4: Wariskan extended group dari orang tua yang mengundang (sama seperti jalur accept)
+        await linkNodeToRelativeExtendedGroups(client, newNodeId, parentNodeId);
+
+        // Pastikan cache inviter juga ter-update (untuk user lama)
+        await client.query(
+          `UPDATE nodes 
+           SET extended_group_ids = COALESCE((
+             SELECT ARRAY_AGG(extended_group_id ORDER BY extended_group_id)
+             FROM node_extended_groups 
+             WHERE node_id = $1
+           ), '{}'),
+           updated_at = NOW()
+           WHERE id = $1`,
+          [parentNodeId]
         );
 
         // 2. Hanya ayah yang mengatur family membership dan birth_order
@@ -216,7 +239,21 @@ export async function POST(request: NextRequest) {
             [familyId, newNodeId]
           );
 
-          // Tambahkan sebagai child di family
+          // Pastikan ayah juga terdaftar sebagai head
+          await client.query(
+            `UPDATE nodes SET current_nuclear_family_id = $1, updated_at = NOW() WHERE id = $2`,
+            [familyId, inviterNodeId]
+          );
+
+          await client.query(
+            `INSERT INTO nuclear_family_memberships 
+               (nuclear_family_id, node_id, role, join_reason, joined_at)
+             VALUES ($1, $2, 'head', 'birth', NOW())
+             ON CONFLICT (nuclear_family_id, node_id) DO NOTHING`,
+            [familyId, inviterNodeId]
+          );
+
+          // Tambahkan anak sebagai child
           await client.query(
             `INSERT INTO nuclear_family_memberships 
                (nuclear_family_id, node_id, role, join_reason, joined_at)
@@ -225,20 +262,12 @@ export async function POST(request: NextRequest) {
             [familyId, newNodeId]
           );
 
-          // Tentukan birth_order (berdasarkan jumlah anak ayah saat ini)
-          const birthOrderRes = await client.query(
-            `SELECT COUNT(*) FROM parent_child_relations 
-             WHERE parent_node_id = $1 AND parent_type = 'father'`,
-            [inviterNodeId]
-          );
-          const birthOrder = parseInt(birthOrderRes.rows[0].count, 10);
+          // birth_order sudah tidak disimpan di tabel nodes (new schema)
+          // Bisa dihitung dinamis dari parent_child_relations saat diperlukan.
 
-          await client.query(
-            `UPDATE nodes SET birth_order = $1, updated_at = NOW() WHERE id = $2`,
-            [birthOrder, newNodeId]
-          );
 
-        } else {
+         } else {
+
           // Ibu mengundang
           // Jika anak belum punya keluarga → hanya relasi (tidak sentuh family membership)
           // Jika anak sudah punya keluarga (misalnya dari ayah), kita tidak mengubahnya di sini

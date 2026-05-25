@@ -140,17 +140,7 @@ export async function POST(request: NextRequest) {
           [familyId, child_id]
         );
 
-        // Hitung birth_order
-        const countRes = await client.query(
-          `SELECT COUNT(*) FROM parent_child_relations WHERE parent_node_id = $1 AND parent_type = 'father'`,
-          [parent_id]
-        );
-        const birthOrder = parseInt(countRes.rows[0].count, 10);
-
-        await client.query(
-          `UPDATE nodes SET birth_order = $1, updated_at = NOW() WHERE id = $2`,
-          [birthOrder, child_id]
-        );
+        // birth_order sudah tidak ada di tabel nodes (new schema)
       }
       // Jika ibu → hanya relasi (sesuai aturan yang sudah ada)
     }

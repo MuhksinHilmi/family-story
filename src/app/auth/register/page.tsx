@@ -35,6 +35,11 @@ function RegisterForm() {
           if (data.invitation) {
             setInvitationData(data.invitation);
 
+            // Lock email from the invitation
+            if (data.invitation.invitee_email) {
+              setFormData(prev => ({ ...prev, email: data.invitation.invitee_email }));
+            }
+
             // Lock gender for spouse invitation
             if (data.invitation.relationship_type === 'spouse' && data.invitation.inviter?.gender) {
               const forcedGender = data.invitation.inviter.gender === 'male' ? 'female' : 'male';
@@ -131,7 +136,11 @@ function RegisterForm() {
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               required
+              disabled={!!inviteToken}   // Lock email ketika datang dari undangan
             />
+            {inviteToken && (
+              <p className="text-xs text-[#6B5F4D]">Email telah dikunci sesuai undangan yang Anda terima.</p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="phone" className="text-sm font-medium text-[#3B2F1E]">Nomor Telepon <span className="text-[#9C8B75] font-normal">(opsional)</span></Label>

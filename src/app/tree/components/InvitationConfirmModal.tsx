@@ -9,10 +9,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api-client";
 
 interface Invitation {
   id: number;
-  token: string;
+  token?: string | null;
   relationship_type: "spouse" | "child";
   inviter: {
     full_name: string;
@@ -41,15 +42,14 @@ export function InvitationConfirmModal({
   const relationshipLabel = isSpouse ? "Pasangan" : "Anak";
 
   const handleAccept = async () => {
-    if (!invitation.token) return;
+    console.log("Accepting invitation with id:", invitation.id, "token:", invitation.token || null);
 
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/invitations/accept", {
+      const res = await apiFetch("/api/invitations/accept", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: invitation.token }),
+        body: JSON.stringify({ invitation_id: invitation.id }),
       });
 
       const data = await res.json();
@@ -70,18 +70,12 @@ export function InvitationConfirmModal({
   };
 
   const handleReject = async () => {
-    if (!invitation?.token) {
-      onClose();
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/invitations/reject", {
+      const res = await apiFetch("/api/invitations/reject", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: invitation.token }),
+        body: JSON.stringify({ invitation_id: invitation.id }),
       });
 
       const data = await res.json();
@@ -120,23 +114,21 @@ export function InvitationConfirmModal({
 
           {isSpouse && (
             <p className="text-xs text-[#6B5B4F]">
-              Jika diterima, kalian akan resmi berpasangan dan bergabung dalam satu keluarga.
+              Jika diterima, kalian akan resmi berpasangan dan bergabung dalam
+              satu keluarga.
             </p>
           )}
 
           {!isSpouse && (
             <p className="text-xs text-[#6B5B4F]">
-              Jika diterima, kamu akan menjadi anak dari {invitation.inviter.full_name}.
+              Jika diterima, kamu akan menjadi anak dari{" "}
+              {invitation.inviter.full_name}.
             </p>
           )}
         </div>
 
         <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            onClick={handleReject}
-            disabled={isLoading}
-          >
+          <Button variant="outline" onClick={handleReject} disabled={isLoading}>
             Tolak Undangan
           </Button>
           <Button

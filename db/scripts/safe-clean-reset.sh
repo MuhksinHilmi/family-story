@@ -117,8 +117,8 @@ createdb "$DB_NAME"
 echo "✅ Database baru '$DB_NAME' berhasil dibuat."
 echo ""
 
-# 8. Jalankan schema baru
-echo ">>> LANGKAH 6: Menjalankan schema baru..."
+# 8. Jalankan schema baru (init.sql)
+echo ">>> LANGKAH 6: Menjalankan schema baru (init.sql)..."
 if [ ! -f "$NEW_SCHEMA" ]; then
     echo "❌ File schema tidak ditemukan: $NEW_SCHEMA"
     exit 1
@@ -127,15 +127,43 @@ fi
 psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f "$NEW_SCHEMA"
 
 if [ $? -eq 0 ]; then
-    echo "✅ Schema baru berhasil dijalankan."
+    echo "✅ Schema baru (init.sql) berhasil dijalankan."
 else
     echo "❌ Gagal menjalankan schema baru! (script dihentikan karena error)"
     exit 1
 fi
 echo ""
 
-# 9. Verifikasi
-echo ">>> LANGKAH 7: Verifikasi tabel..."
+# 9. Jalankan migrasi tambahan (jika ada)
+echo ">>> LANGKAH 7: Menjalankan migrasi tambahan..."
+MIGRATIONS_DIR="db/schema/2026-clean/migrations"
+
+if [ -d "$MIGRATIONS_DIR" ]; then
+    # Get all .sql files sorted alphabetically (001_, 002_, etc.)
+    MIGRATION_FILES=$(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | sort)
+
+    if [ -n "$MIGRATION_FILES" ]; then
+        echo "   Ditemukan migrasi tambahan:"
+        for migration in $MIGRATION_FILES; do
+            echo "   - $(basename "$migration")"
+            psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f "$migration"
+
+            if [ $? -ne 0 ]; then
+                echo "❌ Gagal menjalankan migrasi: $(basename "$migration")"
+                exit 1
+            fi
+        done
+        echo "✅ Semua migrasi tambahan berhasil dijalankan."
+    else
+        echo "   Tidak ada file migrasi tambahan."
+    fi
+else
+    echo "   Folder migrations tidak ditemukan (lewati)."
+fi
+echo ""
+
+# 8. Verifikasi
+echo ">>> LANGKAH 8: Verifikasi tabel..."
 echo "Tabel yang ada di database baru:"
 psql -d "$DB_NAME" -c "\dt" | head -30
 

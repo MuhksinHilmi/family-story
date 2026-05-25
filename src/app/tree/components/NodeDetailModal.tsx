@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { format } from 'date-fns';
+import { id } from 'date-fns/locale';
 import {
   Dialog,
   DialogContent,
@@ -46,6 +48,17 @@ export function NodeDetailModal({
   const [isReinviting, setIsReinviting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+
+  const formatBirthDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      // Format: Kamis, 10 April 1987
+      return format(date, 'EEEE, d MMMM yyyy', { locale: id });
+    } catch {
+      return dateStr;
+    }
+  };
 
   const node = nodeId
     ? nodes.find((n) => String(n.id) === String(nodeId))?.data
@@ -124,24 +137,24 @@ export function NodeDetailModal({
   };
 
   const spouseName = node.spouse_ids.map((id) => getNodeName(id)).find(Boolean);
-  const fatherName =
-    getNodeName(node.father_id) ||
-    nodes.find(
-      (n) =>
-        Array.isArray(n.data.children_ids) &&
-        n.data.children_ids.map(String).includes(String(node.id)) &&
-        n.data.gender === "male",
-    )?.data?.full_name ||
-    null;
-  const motherName =
-    getNodeName(node.mother_id) ||
-    nodes.find(
-      (n) =>
-        Array.isArray(n.data.children_ids) &&
-        n.data.children_ids.map(String).includes(String(node.id)) &&
-        n.data.gender === "female",
-    )?.data?.full_name ||
-    null;
+  const fatherName = node.father_id
+    ? getNodeName(node.father_id)
+    : nodes.find(
+        (n) =>
+          Array.isArray(n.data.children_ids) &&
+          n.data.children_ids.map(String).includes(String(node.id)) &&
+          n.data.gender === "male",
+      )?.data?.full_name ||
+      null;
+  const motherName = node.mother_id
+    ? getNodeName(node.mother_id)
+    : nodes.find(
+        (n) =>
+          Array.isArray(n.data.children_ids) &&
+          n.data.children_ids.map(String).includes(String(node.id)) &&
+          n.data.gender === "female",
+      )?.data?.full_name ||
+      null;
   const children = getChildrenSorted();
 
   const isWife = node.gender === "female" && spouseName;
@@ -192,8 +205,8 @@ export function NodeDetailModal({
               {fatherName && !node.nasab_line && (
                 <div className="text-sm text-[#6B5B45]">
                   {node.gender === "male"
-                    ? `Bin ${fatherName}`
-                    : `Binti ${fatherName}`}
+                    ? `bin ${fatherName.split(/\s+/)[0]}`
+                    : `binti ${fatherName.split(/\s+/)[0]}`}
                 </div>
               )}
               <p className="text-sm text-[#9C8B75]">
@@ -224,7 +237,7 @@ export function NodeDetailModal({
             {node.birth_date && (
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-[#9C8B75]" />
-                <span className="text-sm">Lahir: {node.birth_date}</span>
+                <span className="text-sm">Lahir: {formatBirthDate(node.birth_date)}</span>
               </div>
             )}
             {spouseName && (

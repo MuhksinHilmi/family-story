@@ -47,11 +47,18 @@ CREATE TABLE nodes (
     photo_url TEXT,
     is_alive BOOLEAN DEFAULT true,
 
+    -- Posisi node di canvas (bisa di-drag oleh pemilik node)
+    position_x NUMERIC DEFAULT 0,
+    position_y NUMERIC DEFAULT 0,
+
     -- Privacy: relationship data (spouse, children, parents) WAJIB public
     -- Data pribadi boleh user atur
     phone_is_public BOOLEAN DEFAULT false,
     birth_date_is_public BOOLEAN DEFAULT false,
     death_date_is_public BOOLEAN DEFAULT false,
+
+    -- Extended family groups cache (denormalized for fast querying)
+    extended_group_ids INTEGER[] DEFAULT '{}',
 
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -147,7 +154,11 @@ CREATE TABLE nuclear_family_memberships (
     -- Denormalized untuk query cepat
     is_active BOOLEAN GENERATED ALWAYS AS (left_at IS NULL) STORED,
 
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Pastikan 1 node hanya punya 1 record membership per nuclear family
+    -- (penting supaya ON CONFLICT (nuclear_family_id, node_id) DO NOTHING berfungsi)
+    CONSTRAINT uq_nuclear_family_node UNIQUE (nuclear_family_id, node_id)
 );
 
 CREATE INDEX idx_nfm_node ON nuclear_family_memberships(node_id);
@@ -197,6 +208,28 @@ CREATE INDEX idx_invitations_uuid ON invitations(uuid);
 CREATE INDEX idx_invitations_invited_by ON invitations(invited_by_node_id);
 CREATE INDEX idx_invitations_email ON invitations(invitee_email);
 CREATE INDEX idx_invitations_node ON invitations(invitee_node_id);
+
+-- ============================================================================
+-- EXTENDED FAMILY GROUPS (multi-group support for large family networks)
+-- ============================================================================
+
+-- Master table for Extended Family Groups
+CREATE TABLE extended_family_groups (
+    id BIGSERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Junction table: A node can belong to multiple extended family groups
+-- This supports the multi-group model for family merging through marriage
+CREATE TABLE node_extended_groups (
+    node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    extended_group_id BIGINT NOT NULL REFERENCES extended_family_groups(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (node_id, extended_group_id)
+);
+
+CREATE INDEX idx_node_extended_groups_node_id ON node_extended_groups(node_id);
+CREATE INDEX idx_node_extended_groups_extended_group_id ON node_extended_groups(extended_group_id);
 
 -- ============================================================================
 -- 7. CHAT ROOMS (disesuaikan)

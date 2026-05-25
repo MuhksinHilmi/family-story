@@ -44,12 +44,13 @@ export interface FamilyNodeData extends Record<string, unknown> {
   is_alive: boolean;
   nasab_line?: string;
   birth_order?: number;
-  father_id?: string;
-  mother_id?: string;
+  father_id?: string | null;
+  mother_id?: string | null;
   spouse_ids: string[];
   children_ids: string[];
   position_x: number;
   position_y: number;
+  extended_group_ids?: number[];
   invitation_email?: string;
   invitation_status: 'pending' | 'accepted' | 'rejected';
   created_at: string;

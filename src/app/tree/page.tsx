@@ -39,6 +39,15 @@ export default function TreePage() {
   const [selectedInvitation, setSelectedInvitation] = useState<any>(null);
   const [isInvitationModalOpen, setIsInvitationModalOpen] = useState(false);
 
+  // Loading state for "Undang User Baru" (email invite)
+  const [isSendingInvitation, setIsSendingInvitation] = useState(false);
+
+  // Loading state for per-node reload (Fase 4)
+  const [reloadingNodeId, setReloadingNodeId] = useState<string | null>(null);
+
+  // A4: Track if we have already attempted to load from extended groups on first load
+  const hasTriedExtendedLoad = useRef(false);
+
   const {
     nodes,
     setNodes,
@@ -56,7 +65,60 @@ export default function TreePage() {
     familyId,
     familyUuid,
     currentUserNodeUuid,
+    addRelatedNodes,
+    getNodesWithMoreRelations,
+    loadMoreGlobally,
+    currentUserExtendedGroups,
+    loadFromUserExtendedGroups,
   } = useFamilyTree();
+
+  // React Flow instance (safe way via onInit, not useReactFlow() at top level)
+  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+
+  // Fase 5: Global lazy loading state + derived list (declared after hook to avoid TDZ)
+  const [isGlobalLoading, setIsGlobalLoading] = useState(false);
+
+  const nodesWithMoreRelations = useMemo(
+    () => getNodesWithMoreRelations(),
+    [getNodesWithMoreRelations, nodes.length]
+  );
+
+  // Client-side nasab fallback (hanya untuk node yang belum dapat nasab_line dari server)
+  const nodesWithNasab = useMemo(() => {
+    return nodes.map((node) => {
+      const data = node.data as FamilyNodeData;
+
+      // Jika server sudah mengirim nasab_line, pakai itu
+      if (data.nasab_line) {
+        return node;
+      }
+
+      const fatherId = data.father_id;
+      if (!fatherId) {
+        return node;
+      }
+
+      const fatherNode = nodes.find((n) => n.id === fatherId);
+      const fatherName = fatherNode?.data?.full_name;
+
+      if (!fatherName) {
+        return node;
+      }
+
+      const fatherFirstName = fatherName.trim().split(/\s+/)[0];
+      const nasab_line = data.gender === 'male' 
+        ? `bin ${fatherFirstName}` 
+        : `binti ${fatherFirstName}`;
+
+      return {
+        ...node,
+        data: {
+          ...data,
+          nasab_line,
+        },
+      };
+    });
+  }, [nodes]);
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -69,6 +131,22 @@ export default function TreePage() {
       fetchPendingInvitations();
     }
   }, [user, authLoading, loadUserNode]);
+
+  // A4: One-time trigger on first load of the tree page (or after full refresh)
+  // Automatically load nodes from the user's extended groups on initial view.
+  // Capped at 30 nodes for the very first auto extended load (user can use
+  // "Muat lebih banyak relasi" for the rest or for direct relations).
+  useEffect(() => {
+    if (
+      !hasTriedExtendedLoad.current &&
+      currentUserNodeUuid &&
+      currentUserExtendedGroups.length > 0
+    ) {
+      hasTriedExtendedLoad.current = true;
+      // First auto extended load: up to 3 groups, max 30 nodes total
+      loadFromUserExtendedGroups(3, undefined, 30);
+    }
+  }, [currentUserNodeUuid, currentUserExtendedGroups, loadFromUserExtendedGroups]);
 
   // Client-side sync: always use the latest photo from the logged-in user's profile
   // for their own node in the tree (so avatar updates immediately after profile change)
@@ -102,6 +180,22 @@ export default function TreePage() {
     );
   }, [user, nodes.length]); // nodes.length to re-run when tree is (re)loaded
 
+  // Phase 5: Center view on the logged-in user's own node after load
+  useEffect(() => {
+    if (!currentUserNodeUuid || nodes.length === 0 || !reactFlowInstance) return;
+
+    const userNode = nodes.find(n => n.id === currentUserNodeUuid);
+    if (!userNode) return;
+
+    // Gunakan setCenter agar lebih halus dan fokus ke node user
+    // Bukan fitView seluruh tree
+    const { x, y } = userNode.position;
+    reactFlowInstance.setCenter(x, y, {
+      zoom: 1.1,
+      duration: 700,
+    });
+  }, [currentUserNodeUuid, nodes.length, reactFlowInstance]);
+
   const handleInfoClick = useCallback((nodeId: string) => {
     setDetailNodeId(nodeId);
     setIsDetailOpen(true);
@@ -122,26 +216,67 @@ export default function TreePage() {
     }
   }, []);
 
+  // === Fase 4: Reload relasi tambahan dari node tertentu ===
+  const handleReload = useCallback(async (nodeId: string) => {
+    setReloadingNodeId(nodeId);
 
+    try {
+      const currentNodeIds = nodes.map((n) => n.id);
+
+      const res = await apiFetch("/api/tree/related", {
+        method: "POST",
+        body: JSON.stringify({
+          node_ids: [nodeId],
+          exclude_node_ids: currentNodeIds,
+          limit: 30,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert("Gagal memuat relasi tambahan: " + (err.error || res.status));
+        setReloadingNodeId(null);
+        return;
+      }
+
+      const { nodes: newNodes, relations } = await res.json();
+
+      if (newNodes && newNodes.length > 0) {
+        addRelatedNodes(newNodes, relations || [], nodeId);
+      } else {
+        alert("Tidak ada relasi tambahan yang ditemukan untuk node ini.");
+      }
+    } catch (error) {
+      console.error("Reload node error:", error);
+      alert("Terjadi kesalahan saat memuat relasi tambahan.");
+    } finally {
+      setReloadingNodeId(null);
+    }
+  }, [nodes, addRelatedNodes]);
+
+  // Fase 5: Global lazy load (capped)
+  const handleGlobalLoadMore = useCallback(async () => {
+    setIsGlobalLoading(true);
+    try {
+      const result = await loadMoreGlobally(50);
+      if (result.added === 0) {
+        // Optional: could show a toast, but keep silent for now to avoid noise
+      }
+    } finally {
+      setIsGlobalLoading(false);
+    }
+  }, [loadMoreGlobally]);
 
   const nodeTypes = useMemo(
     () => ({
       custom: function FamilyNodeWrapper(props: any) {
-        // augment node data with nasab_line and siblings for display in the node detail modal
+        // Note: nasab_line is now pre-computed reliably in nodesWithNasab (see above)
+        // We only keep sibling computation here for the detail modal (can be improved later)
         const node = props.data as FamilyNodeData;
         const allNodes: Node<FamilyNodeData>[] = props.__rf?.__nodes || [];
-        // compute nasab_line: only from father_id (bin/binti is for father lineage)
-        const fatherId = node.father_id || null;
-        const fatherName = fatherId
-          ? allNodes.find((n: any) => n.id === fatherId)?.data?.full_name
-          : null;
-        if (fatherName)
-          node.nasab_line =
-            node.gender === "male"
-              ? `bin ${fatherName}`
-              : `binti ${fatherName}`;
 
-        // compute siblings (from father_id only, as they share the same nasab)
+        // compute siblings (from father_id only)
+        const fatherId = node.father_id || null;
         if (fatherId) {
           const siblings = allNodes
             .filter(
@@ -151,10 +286,29 @@ export default function TreePage() {
           (node as any).siblings_names = siblings;
         }
 
-        return <FamilyNode {...props} onInfoClick={handleInfoClick} />;
+        // Safety: ensure critical arrays exist on incrementally loaded nodes
+        node.spouse_ids = node.spouse_ids || [];
+        node.children_ids = node.children_ids || [];
+        node.father_id = node.father_id ?? null;
+        node.mother_id = node.mother_id ?? null;
+
+        // Fase 4: Tentukan apakah node ini masih punya relasi yang belum diload
+        const nodesWithMore = getNodesWithMoreRelations();
+        const showReload = nodesWithMore.includes(props.id);
+        const isReloading = reloadingNodeId === props.id;
+
+        return (
+          <FamilyNode
+            {...props}
+            onInfoClick={handleInfoClick}
+            onReload={handleReload}
+            showReloadButton={showReload}
+            isReloading={isReloading}
+          />
+        );
       },
     }),
-    [handleInfoClick],
+    [handleInfoClick, getNodesWithMoreRelations, handleReload, reloadingNodeId],
   );
 
   const onNodeClick = useCallback(
@@ -203,68 +357,43 @@ export default function TreePage() {
       });
   }, [familyUuid]);
 
-
-
-  const handleInviteMember = useCallback(
-    (
-      email: string,
-      fullName: string,
-      gender: "male" | "female",
-      phone: string | undefined,
-      relationshipType: "spouse" | "child",
-    ) => {
+  const handleInviteNewUser = useCallback(
+    (email: string, relationshipType: "spouse" | "child") => {
       if (!currentUserNodeUuid) {
         alert("Node Anda belum tersedia. Silakan refresh halaman.");
         return;
       }
 
-      const payload: any = {
-        relationship_type: relationshipType,
-        invitee_email: email,
-        is_share_link: true,
-      };
-
-      if (relationshipType === "child") {
-        payload.parent_node_uuid = currentUserNodeUuid;
-      }
+      setIsSendingInvitation(true); // show loading overlay
+      closeModal();                 // close the invite modal immediately
 
       apiFetch("/api/invitations", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          relationship_type: relationshipType,
+          invitee_email: email,
+          is_share_link: true,
+          ...(relationshipType === "child" && { parent_node_uuid: currentUserNodeUuid }),
+        }),
       })
         .then((res) => res.json())
         .then((data) => {
-          closeModal();
-
           if (data.error) {
             alert("Gagal mengirim undangan: " + data.error);
+            setIsSendingInvitation(false);
             return;
           }
 
-          // Refresh bell list of pending invitations
-          // (we can emit a custom event or call the fetch function if exposed)
           window.dispatchEvent(new CustomEvent('invitations-updated'));
 
-          if (data.share_link?.token) {
-            const link = `${window.location.origin}/auth/register?invite=${data.share_link.token}`;
-            const confirmed = confirm(
-              `Undangan berhasil dibuat!\n\n` +
-              `Bagikan link ini ke ${fullName} (${email}):\n\n${link}\n\n` +
-              `Link akan kadaluarsa dalam 7 hari dan hanya bisa dipakai sekali.`
-            );
-            if (confirmed) {
-              navigator.clipboard?.writeText(link).catch(() => {});
-            }
-          } else {
-            alert(`Undangan berhasil dikirim ke ${email}. Mereka akan menerima email.`);
-          }
+          alert(`Undangan berhasil dikirim ke ${email}.\n\nPenerima akan menerima email berisi link untuk mendaftar dan bergabung.`);
 
-          // Do NOT add ghost node to the graph anymore.
-          // The person will appear automatically after they register + claim.
+          setIsSendingInvitation(false); // hide loading after user clicks OK on alert
         })
         .catch((err) => {
           console.error("Invite error:", err);
           alert("Gagal mengirim undangan");
+          setIsSendingInvitation(false);
         });
     },
     [currentUserNodeUuid, closeModal],
@@ -302,11 +431,26 @@ export default function TreePage() {
               setIsInvitationModalOpen(true);
             }}
           />
+
+          {/* Fase 5: Global lazy load button (only when there are unexplored nodes) */}
+          {nodesWithMoreRelations.length > 0 && (
+            <div className="flex justify-end px-3 -mt-1 mb-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGlobalLoadMore}
+                disabled={isGlobalLoading}
+                className="text-xs border-[#D4C4A8] text-[#3B2F1E] hover:bg-[#F5F0E8]"
+              >
+                {isGlobalLoading ? 'Memuat...' : 'Muat lebih banyak relasi'}
+              </Button>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="h-full p-0">
           <div className="h-full w-full">
             <ReactFlow
-              nodes={nodes}
+              nodes={nodesWithNasab}
               edges={edges}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChangeWithSave}
@@ -314,6 +458,7 @@ export default function TreePage() {
               onNodeClick={onNodeClick}
               // onEdgeClick={onEdgeClick}
               onPaneClick={handlePaneClick}
+              onInit={setReactFlowInstance}
               fitView
               fitViewOptions={{ padding: 0.2 }}
             >
@@ -327,8 +472,8 @@ export default function TreePage() {
       <AddNodeModal
         open={isModalOpen}
         onClose={closeModal}
-        onInvite={handleInviteMember}
-        title="Tambah Anggota"
+        onInvite={handleInviteNewUser}
+        title="Undang User Baru"
       />
 
       <NodeDetailModal
@@ -337,10 +482,10 @@ export default function TreePage() {
           setIsDetailOpen(false);
           setDetailNodeId(null);
         }}
-        nodeId={detailNodeId}
-        nodes={nodes}
-        onDelete={deleteNode}
-        currentUserId={user?.id}
+         nodeId={detailNodeId}
+         nodes={nodesWithNasab}
+         onDelete={deleteNode}
+         currentUserId={user?.id}
       />
 
       {/* Invitation Confirmation Modal */}
@@ -356,19 +501,30 @@ export default function TreePage() {
           fetchPendingInvitations();
           window.dispatchEvent(new CustomEvent("invitations-updated"));
 
-          // Optionally reload tree data if we have a family loaded
-          if (familyId) {
-            // re-fetch current family (new schema loader)
-            fetch(`/api/tree?family_id=${familyId}`)
-              .then((r) => r.json())
-              .then((d) => {
-                if (d.nodes) setNodes(d.nodes);
-                if (d.edges) setEdges(d.edges);
-              })
-              .catch(() => {});
+          // Reload the full tree using the current user's node (new schema path)
+          if (user) {
+            loadUserNode(
+              user.id,
+              user.full_name,
+              user.gender || "male",
+              user.birth_date,
+            );
           }
         }}
       />
+
+      {/* Loading Overlay for "Undang User Baru" (Email Invite) */}
+      {isSendingInvitation && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-2xl px-8 py-7 shadow-xl flex flex-col items-center gap-3 min-w-[260px]">
+            <div className="w-8 h-8 border-4 border-[#4A7C59] border-t-transparent rounded-full animate-spin" />
+            <p className="text-[#3B2F1E] font-medium text-base">Mengirim undangan...</p>
+            <p className="text-sm text-[#6B5F4D] text-center">
+              Mohon tunggu sebentar
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

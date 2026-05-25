@@ -24,13 +24,15 @@ export async function GET(request: NextRequest) {
     const membersRes = await client.query(
       `SELECT 
          n.id, n.uuid, n.user_id, n.full_name, n.gender, n.birth_date, n.death_date,
-         n.photo_url, n.is_alive, n.birth_order, n.current_nuclear_family_id,
+         n.photo_url, n.is_alive, n.current_nuclear_family_id,
+         n.position_x, n.position_y,
+         n.extended_group_ids,
          n.created_at, n.updated_at,
          m.role, m.join_reason
        FROM nuclear_family_memberships m
        JOIN nodes n ON n.id = m.node_id
        WHERE m.nuclear_family_id = $1 AND m.left_at IS NULL
-       ORDER BY n.birth_order NULLS LAST, n.full_name`,
+       ORDER BY n.full_name`,
       [nuclearFamilyId]
     );
 
@@ -111,21 +113,29 @@ export async function GET(request: NextRequest) {
 
     const nodes = memberRows.map((node: any, idx: number) => {
       const nodeId = node.id.toString();
-      let x = 120 + (idx % 4) * 160;
-      let y = 80 + Math.floor(idx / 4) * 180;
 
-      if (nodeId === primaryHusband) { x = 80; y = 60; }
-      else if (nodeId === primaryWife) { x = 340; y = 60; }
-      else {
-        const kids = childrenMap.get(primaryHusband || '') || [];
-        const kidIndex = kids.indexOf(nodeId);
-        if (kidIndex >= 0) {
-          x = 60 + kidIndex * 170;
-          y = 240;
+      // Prefer saved position from database if the user has moved the node
+      // (we treat 0,0 as "not yet manually positioned" for new nodes)
+      const hasSavedPosition = node.position_x !== 0 || node.position_y !== 0;
+
+      let x = hasSavedPosition ? node.position_x : 120 + (idx % 4) * 160;
+      let y = hasSavedPosition ? node.position_y : 80 + Math.floor(idx / 4) * 180;
+
+      // Only apply smart initial layout if user hasn't manually positioned it yet
+      if (!hasSavedPosition) {
+        if (nodeId === primaryHusband) { x = 80; y = 60; }
+        else if (nodeId === primaryWife) { x = 340; y = 60; }
+        else {
+          const kids = childrenMap.get(primaryHusband || '') || [];
+          const kidIndex = kids.indexOf(nodeId);
+          if (kidIndex >= 0) {
+            x = 60 + kidIndex * 170;
+            y = 240;
+          }
         }
-      }
 
-      if (memberRows.length === 1) { x = 220; y = 120; }
+        if (memberRows.length === 1) { x = 220; y = 120; }
+      }
 
       const fatherId = parentMap.get(nodeId)?.father || null;
       const motherId = parentMap.get(nodeId)?.mother || null;
@@ -133,7 +143,10 @@ export async function GET(request: NextRequest) {
       let nasab = null;
       if (fatherId) {
         const dad = idToRow.get(fatherId);
-        nasab = `${node.gender === 'male' ? 'Bin' : 'Binti'} ${dad?.full_name || ''}`;
+        const fatherFirstName = dad?.full_name ? dad.full_name.trim().split(/\s+/)[0] : '';
+        nasab = fatherFirstName 
+          ? `${node.gender === 'male' ? 'bin' : 'binti'} ${fatherFirstName}` 
+          : null;
       }
 
       return {
@@ -149,10 +162,10 @@ export async function GET(request: NextRequest) {
           birth_date: node.birth_date,
           death_date: node.death_date,
           photo_url: node.photo_url,
-          is_alive: node.is_alive,
-          nasab_line: nasab,
-          birth_order: node.birth_order,
-          father_id: fatherId,
+           is_alive: node.is_alive,
+           nasab_line: nasab,
+           father_id: fatherId,
+
           mother_id: motherId,
           spouse_ids: spouseMap.get(nodeId) || [],
           children_ids: childrenMap.get(nodeId) || [],
@@ -160,6 +173,7 @@ export async function GET(request: NextRequest) {
           invitation_status: 'accepted',
           position_x: x,
           position_y: y,
+          extended_group_ids: node.extended_group_ids || [],
           created_at: node.created_at,
           updated_at: node.updated_at,
         },

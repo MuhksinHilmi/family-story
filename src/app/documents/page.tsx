@@ -27,6 +27,8 @@ interface DocumentItem {
   file_size: number;
   mime_type: string;
   visibility_scope: string;
+  small_family_uuid?: string;
+  recipient_user_ids?: string[];
   description?: string;
   created_at: string;
   public_url: string;
@@ -103,7 +105,7 @@ export default function DocumentsPage() {
   >("private");
 
   // State untuk multi-select "Orang Tertentu"
-  const [selectedRecipientIds, setSelectedRecipientIds] = useState<number[]>(
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>(
     [],
   );
 

@@ -7,31 +7,21 @@ import { Label } from '@/components/ui/label';
 interface AddNodeModalProps {
   open: boolean;
   onClose: () => void;
-  onInvite: (email: string, fullName: string, gender: 'male' | 'female', phone: string | undefined, relationshipType: 'spouse' | 'child') => void;
+  onInvite: (email: string, relationshipType: 'spouse' | 'child') => void;
   title?: string;
 }
 
-export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota' }: AddNodeModalProps) {
-  const [formData, setFormData] = useState({
-    full_name: '',
-    invitation_email: '',
-    gender: 'male' as 'male' | 'female',
-    phone: '',
-  });
+export function AddNodeModal({ open, onClose, onInvite, title = 'Undang User Baru' }: AddNodeModalProps) {
+  const [email, setEmail] = useState('');
   const [relationshipType, setRelationshipType] = useState<'spouse' | 'child'>('child');
-  const [errors, setErrors] = useState<{ email?: string }>({});
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!open) {
-      setFormData({
-        full_name: '',
-        invitation_email: '',
-        gender: 'male',
-        phone: '',
-      });
+      setEmail('');
       setRelationshipType('child');
-      setErrors({});
+      setError('');
     }
   }, [open]);
 
@@ -40,13 +30,16 @@ export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota'
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.invitation_email || !formData.full_name) return;
-    if (errors.email) return;
+    if (!email) {
+      setError('Email wajib diisi');
+      return;
+    }
+    setError('');
     setIsLoading(true);
     setTimeout(() => {
-      onInvite(formData.invitation_email, formData.full_name, formData.gender, formData.phone || undefined, relationshipType);
+      onInvite(email, relationshipType);
       setIsLoading(false);
-    }, 500);
+    }, 300);
   };
 
   return (
@@ -55,20 +48,10 @@ export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota'
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="full_name">Nama</Label>
-            <Input
-              id="full_name"
-              value={formData.full_name}
-              onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-              required
-            />
-          </div>
-
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
             <Label>Undang sebagai</Label>
-            <div className="flex gap-4">
+            <div className="flex gap-6">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -77,7 +60,7 @@ export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota'
                   checked={relationshipType === 'child'}
                   onChange={() => setRelationshipType('child')}
                 />
-                <span>Saya sebagai Orang Tua</span>
+                <span>Saya sebagai Orang Tua (Anak)</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -91,74 +74,38 @@ export function AddNodeModal({ open, onClose, onInvite, title = 'Tambah Anggota'
               </label>
             </div>
             <p className="text-xs text-[#6B5F4D]">
-              {relationshipType === 'spouse' 
-                ? 'Jenis kelamin akan dikunci berlawanan saat pendaftaran.' 
-                : 'Anak akan ditambahkan ke keluarga nuklir Anda (aturan ayah sebagai pemilik).'}
+              {relationshipType === 'spouse'
+                ? 'Jenis kelamin penerima akan dikunci berlawanan saat pendaftaran.'
+                : 'Anak akan ditambahkan ke keluarga Anda.'}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="invitation_email">Email</Label>
+            <Label htmlFor="email">Email Penerima</Label>
             <Input
-              id="invitation_email"
+              id="email"
               type="email"
               placeholder="email@contoh.com"
-              value={formData.invitation_email}
+              value={email}
               onChange={(e) => {
-                setFormData({ ...formData, invitation_email: e.target.value });
-                if (errors.email) setErrors(prev => ({ ...prev, email: undefined }));
+                setEmail(e.target.value);
+                if (error) setError('');
               }}
               required
-              aria-invalid={!!errors.email}
             />
-            {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
+            <p className="text-xs text-[#6B5F4D]">
+              Orang yang diundang akan mengisi nama, jenis kelamin, dan tanggal lahir sendiri saat mendaftar melalui link.
+            </p>
           </div>
 
-          <div className="space-y-2">
-            <Label>Jenis Kelamin</Label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="gender"
-                  value="male"
-                  checked={formData.gender === 'male'}
-                  onChange={() => setFormData({ ...formData, gender: 'male' })}
-                />
-                Laki-laki
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="gender"
-                  value="female"
-                  checked={formData.gender === 'female'}
-                  onChange={() => setFormData({ ...formData, gender: 'female' })}
-                />
-                Perempuan
-              </label>
-            </div>
-          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="space-y-2">
-            <Label htmlFor="phone">No. HP (Opsional)</Label>
-            <Input
-              id="phone"
-              type="tel"
-              placeholder="081234567890"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              aria-invalid={false}
-            />
-
-          </div>
-
-          <DialogFooter>
+          <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" disabled={isLoading || !!errors.email}>
-              {isLoading ? 'Memproses...' : 'Kirim Undangan'}
+            <Button type="submit" disabled={isLoading || !email}>
+              {isLoading ? 'Mengirim...' : 'Kirim Undangan'}
             </Button>
           </DialogFooter>
         </form>

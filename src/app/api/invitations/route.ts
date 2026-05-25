@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db_helper';
 import { requireAuth } from '@/lib/auth';
 import { randomBytes } from 'crypto';
+import { sendInvitationLink } from '@/lib/email';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
            i.status,
            i.expires_at,
            i.created_at,
+           i.invitee_email,
            n.full_name as inviter_name,
            n.gender as inviter_gender
          FROM invitations i
@@ -45,6 +47,7 @@ export async function GET(request: NextRequest) {
           status: row.status,
           expires_at: row.expires_at,
           created_at: row.created_at,
+          invitee_email: row.invitee_email,   // penting untuk lock email di halaman register
           inviter: {
             full_name: row.inviter_name,
             gender: row.inviter_gender,
@@ -88,6 +91,7 @@ export async function GET(request: NextRequest) {
       WHERE 
         (i.invitee_node_id = ANY($1) OR i.invitee_email = $2)
         AND i.status = $3
+        AND (i.expires_at IS NULL OR i.expires_at > NOW())   -- UUID invites (no token) never expire; only share-link ones do
       ORDER BY i.created_at DESC
     `;
 
@@ -229,6 +233,14 @@ export async function POST(request: NextRequest) {
         if (targetNodeId === invited_by_node_id) {
           return NextResponse.json({ error: 'Tidak dapat mengundang diri sendiri' }, { status: 400 });
         }
+
+        // Jika ini undangan untuk user baru (share link), tapi email sudah terdaftar → tolak
+        if (is_share_link) {
+          return NextResponse.json(
+            { error: 'Email ini sudah terdaftar. Silakan gunakan fitur "Undang via UUID" dari halaman Pengaturan orang tersebut.' },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -351,9 +363,12 @@ export async function POST(request: NextRequest) {
       responseData.share_link = {
         token: invitation.token,
         expires_at: invitation.expires_at,
-        // Contoh URL yang bisa langsung dipakai frontend:
-        // `${window.location.origin}/auth/register?invite=${invitation.token}`
       };
+
+      // Kirim email undangan secara otomatis ke penerima
+      if (targetEmail) {
+        await sendInvitationLink(targetEmail, invitation.token);
+      }
     }
 
     return NextResponse.json(responseData, { status: 201 });
