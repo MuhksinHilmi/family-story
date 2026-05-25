@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api-client";
 
@@ -669,8 +670,8 @@ export default function FeedsPage() {
                       </div>
                     )}
 
-                    {/* Action bar */}
-                    <div className="px-4 py-3 border-t border-[#D4C4A8] flex items-center justify-between text-sm">
+                     {/* Action bar */}
+                     <div className="px-4 py-3 border-t border-[#D4C4A8] flex flex-row items-center justify-between text-sm min-h-[44px] flex-nowrap">
                       {/* Left: Like + Comment */}
                       <div className="flex items-center gap-5">
                         <button
@@ -691,30 +692,25 @@ export default function FeedsPage() {
 
                       {/* Right: Viewers avatars (who can see this feed, excluding self) */}
                       {feed.other_viewer_count && feed.other_viewer_count > 0 && (
-                        <div className="flex items-center -space-x-1.5">
-                          {feed.other_viewers?.slice(0, 4).map((viewer) => (
-                            <div
+                        <div className="flex items-center -space-x-1.5 flex-shrink-0 max-w-[160px] overflow-hidden">
+                          {feed.other_viewers?.slice(0, 9).map((viewer) => (
+                            <Avatar
                               key={viewer.id}
-                              className="w-6 h-6 rounded-full border border-white overflow-hidden ring-1 ring-[#D4C4A8] bg-[#EDE4D3] flex-shrink-0"
+                              className="w-6 h-6 border border-white ring-1 ring-[#D4C4A8]"
                               title={viewer.full_name}
                             >
-                              {viewer.photo_url ? (
-                                <img
-                                  src={viewer.photo_url}
-                                  alt={viewer.full_name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full bg-[#D4C4A8]" />
-                              )}
-                            </div>
+                              {viewer.photo_url && <AvatarImage src={viewer.photo_url} alt={viewer.full_name} />}
+                              <AvatarFallback className="bg-[#EDE4D3] text-[#6B5B45] text-[10px] font-semibold">
+                                {viewer.full_name ? viewer.full_name[0].toUpperCase() : "?"}
+                              </AvatarFallback>
+                            </Avatar>
                           ))}
-                          {(feed.other_viewer_count ?? 0) > 4 && (
+                          {(feed.other_viewer_count ?? 0) > 9 && (
                             <div
                               className="w-6 h-6 rounded-full bg-[#EDE4D3] text-[#6B5B45] text-[9px] font-medium flex items-center justify-center border border-white ring-1 ring-[#D4C4A8]"
                               title={`${feed.other_viewer_count} orang bisa melihat`}
                             >
-                              +{feed.other_viewer_count - 4}
+                              +{feed.other_viewer_count - 9}
                             </div>
                           )}
                         </div>

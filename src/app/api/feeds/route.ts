@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
             WHERE fv2.feed_id = f.id
               AND fv2.viewer_node_id != $1
             ORDER BY n.id
-            LIMIT 5
+            LIMIT 9
           ) n
         ) as other_viewers,
         (
