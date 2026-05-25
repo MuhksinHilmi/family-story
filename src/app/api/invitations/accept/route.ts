@@ -156,7 +156,9 @@ export async function POST(request: NextRequest) {
         [husbandNodeId]
       );
       const husbandCurrentPos = husbandPosRes.rows[0];
-      const husbandHasPosition = husbandCurrentPos && (husbandCurrentPos.position_x !== 0 || husbandCurrentPos.position_y !== 0);
+      const hx = husbandCurrentPos ? Number(husbandCurrentPos.position_x) : 0;
+      const hy = husbandCurrentPos ? Number(husbandCurrentPos.position_y) : 0;
+      const husbandHasPosition = (hx !== 0 || hy !== 0);
 
       let husbandPosition: { x: number; y: number };
       let wifePosition: { x: number; y: number };
@@ -167,10 +169,7 @@ export async function POST(request: NextRequest) {
         wifePosition = calculateWifePosition(husbandPosition);
       } else {
         // Pria sudah punya posisi (pernikahan sebelumnya / drag manual)
-        husbandPosition = {
-          x: husbandCurrentPos.position_x,
-          y: husbandCurrentPos.position_y,
-        };
+        husbandPosition = { x: hx, y: hy };
         wifePosition = calculateWifePosition(husbandPosition);
       }
 
@@ -349,11 +348,10 @@ export async function POST(request: NextRequest) {
           const fatherPos = fatherPosRes.rows[0];
 
           if (fatherPos) {
+            const fx = Number(fatherPos.position_x) || 0;
+            const fy = Number(fatherPos.position_y) || 0;
             // Untuk sekarang kita pakai index 0 (bisa dikembangkan dengan sibling count nanti)
-            const newChildPos = calculateChildPosition({
-              x: fatherPos.position_x || 0,
-              y: fatherPos.position_y || 0,
-            }, 0);
+            const newChildPos = calculateChildPosition({ x: fx, y: fy }, 0);
 
             await client.query(
               `UPDATE nodes 

@@ -60,9 +60,11 @@ export function calculateFirstMarriagePosition(husbandNode: { id: string | numbe
  * Selalu di sebelah kanan suami.
  */
 export function calculateWifePosition(husbandPosition: Position): Position {
+  const baseX = Number(husbandPosition.x) || 0;
+  const baseY = Number(husbandPosition.y) || 0;
   return {
-    x: husbandPosition.x + MARRIAGE_HORIZONTAL_OFFSET,
-    y: husbandPosition.y + (Math.random() * MARRIAGE_VERTICAL_JITTER * 2 - MARRIAGE_VERTICAL_JITTER),
+    x: baseX + MARRIAGE_HORIZONTAL_OFFSET,
+    y: baseY + (Math.random() * MARRIAGE_VERTICAL_JITTER * 2 - MARRIAGE_VERTICAL_JITTER),
   };
 }
 
@@ -74,11 +76,13 @@ export function calculateChildPosition(
   fatherPosition: Position,
   siblingIndex: number = 0
 ): Position {
+  const baseX = Number(fatherPosition.x) || 0;
+  const baseY = Number(fatherPosition.y) || 0;
   const horizontalOffset = (siblingIndex % 3) * CHILD_HORIZONTAL_SPREAD - CHILD_HORIZONTAL_SPREAD;
 
   return {
-    x: fatherPosition.x + horizontalOffset,
-    y: fatherPosition.y + CHILD_VERTICAL_OFFSET + Math.floor(siblingIndex / 3) * 40,
+    x: baseX + horizontalOffset,
+    y: baseY + CHILD_VERTICAL_OFFSET + Math.floor(siblingIndex / 3) * 40,
   };
 }
 
