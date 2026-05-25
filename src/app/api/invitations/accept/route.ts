@@ -307,6 +307,11 @@ export async function POST(request: NextRequest) {
         [inviterNodeId, receiverNodeId, parentType]
       );
 
+      // Update nuclear family snapshot (father-centric) untuk kedua pihak
+      // Ini memastikan anak langsung melihat keluarga inti ayah yang aktif
+      await client.query(`SELECT rebuild_active_nuclear_viewers($1)`, [inviterNodeId]);
+      await client.query(`SELECT rebuild_active_nuclear_viewers($1)`, [receiverNodeId]);
+
       // A4: Wariskan extended family group dari orang tua yang mengundang
       // Contoh kasus: Ayah baru diundang oleh anaknya (istri) yang sudah menikah
       // → Ayah otomatis masuk ke extended group keluarga besar.

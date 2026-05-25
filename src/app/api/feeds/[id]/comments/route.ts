@@ -4,7 +4,7 @@ import pool from '@/lib/db_helper';
 
 /**
  * GET /api/feeds/[id]/comments
- * Get all comments for a feed post (ordered by newest first).
+ * Get all comments for a feed (new schema - visibility via feed_viewers).
  */
 export async function GET(
   request: NextRequest,
@@ -17,28 +17,29 @@ export async function GET(
   const { id: feedId } = await params;
 
   try {
-    // Validate that the user can access this feed (must be family member)
-    const feedRes = await pool.query(
-      `SELECT family_uuid FROM family_feeds WHERE id = $1`,
-      [feedId]
+    // Get current user's node
+    const nodeRes = await pool.query(
+      'SELECT id FROM nodes WHERE user_id = $1 LIMIT 1',
+      [userId]
     );
 
-    if (feedRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Feed tidak ditemukan' }, { status: 404 });
+    if (nodeRes.rows.length === 0) {
+      return NextResponse.json({ error: 'Anda belum memiliki node' }, { status: 403 });
     }
 
-    const familyUuid = feedRes.rows[0].family_uuid;
+    const viewerNodeId = nodeRes.rows[0].id;
 
-    const memberCheck = await pool.query(
+    // Check that user can see this feed via snapshot
+    const accessCheck = await pool.query(
       `SELECT 1 
-       FROM family_members fm
-       JOIN families f ON f.id = fm.family_id
-       WHERE fm.user_id = $1 AND f.uuid = $2`,
-      [userId, familyUuid]
+       FROM feeds f
+       JOIN feed_viewers fv ON fv.feed_id = f.id
+       WHERE f.id = $1 AND fv.viewer_node_id = $2`,
+      [feedId, viewerNodeId]
     );
 
-    if (memberCheck.rows.length === 0) {
-      return NextResponse.json({ error: 'Anda bukan anggota keluarga ini' }, { status: 403 });
+    if (accessCheck.rows.length === 0) {
+      return NextResponse.json({ error: 'Feed tidak ditemukan atau Anda tidak memiliki akses' }, { status: 404 });
     }
 
     // Get comments with user info
@@ -67,7 +68,7 @@ export async function GET(
 
 /**
  * POST /api/feeds/[id]/comments
- * Add a new comment to a feed post (1 level only).
+ * Add a new comment to a feed.
  */
 export async function POST(
   request: NextRequest,
@@ -97,28 +98,29 @@ export async function POST(
   }
 
   try {
-    // Validate feed + family membership
-    const feedRes = await pool.query(
-      `SELECT family_uuid FROM family_feeds WHERE id = $1`,
-      [feedId]
+    // Get current user's node
+    const nodeRes = await pool.query(
+      'SELECT id FROM nodes WHERE user_id = $1 LIMIT 1',
+      [userId]
     );
 
-    if (feedRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Feed tidak ditemukan' }, { status: 404 });
+    if (nodeRes.rows.length === 0) {
+      return NextResponse.json({ error: 'Anda belum memiliki node' }, { status: 403 });
     }
 
-    const familyUuid = feedRes.rows[0].family_uuid;
+    const viewerNodeId = nodeRes.rows[0].id;
 
-    const memberCheck = await pool.query(
+    // Check access via feed_viewers snapshot
+    const accessCheck = await pool.query(
       `SELECT 1 
-       FROM family_members fm
-       JOIN families f ON f.id = fm.family_id
-       WHERE fm.user_id = $1 AND f.uuid = $2`,
-      [userId, familyUuid]
+       FROM feeds f
+       JOIN feed_viewers fv ON fv.feed_id = f.id
+       WHERE f.id = $1 AND fv.viewer_node_id = $2`,
+      [feedId, viewerNodeId]
     );
 
-    if (memberCheck.rows.length === 0) {
-      return NextResponse.json({ error: 'Anda bukan anggota keluarga ini' }, { status: 403 });
+    if (accessCheck.rows.length === 0) {
+      return NextResponse.json({ error: 'Feed tidak ditemukan atau Anda tidak memiliki akses' }, { status: 404 });
     }
 
     // Insert comment

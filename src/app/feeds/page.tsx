@@ -20,8 +20,7 @@ import { apiFetch } from "@/lib/api-client";
 
 interface Feed {
   id: string;
-  family_uuid: string;
-  user_id: string;
+  node_id: string;
   caption: string | null;
   created_at: string;
   user_name: string;
@@ -29,14 +28,19 @@ interface Feed {
   like_count: number;
   comment_count: number;
   has_liked: boolean;
-  scope_type: string;
-  small_family_uuid: string | null;
+  scope_type: "extended" | "nuclear" | "custom";
   media: Array<{
-    id: string;
+    id?: string;
     media_url: string;
     media_type: string;
     sort_order: number;
   }>;
+  other_viewers?: Array<{
+    id: number;
+    full_name: string;
+    photo_url: string | null;
+  }>;
+  other_viewer_count?: number;
 }
 
 interface CommentItem {
@@ -48,11 +52,8 @@ interface CommentItem {
 }
 
 export default function FeedsPage() {
-  const [families, setFamilies] = useState<any[]>([]);
-  const [selectedFamilyUuid, setSelectedFamilyUuid] = useState<string>("");
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingFamilies, setLoadingFamilies] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -116,55 +117,30 @@ export default function FeedsPage() {
     };
   }, [loadingMore, hasMore, refreshing]);
 
-  // Fetch user's families
-  useEffect(() => {
-    const fetchFamilies = async () => {
-      setLoadingFamilies(true);
-      try {
-        const res = await apiFetch("/api/user/families");
-        if (res.ok) {
-          const data = await res.json();
-          setFamilies(data);
-          if (data.length > 0) {
-            setSelectedFamilyUuid(data[0].uuid);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load families", err);
-      } finally {
-        setLoadingFamilies(false);
-      }
-    };
-    fetchFamilies();
-  }, []);
+  // Family fetching removed — feed visibility is now handled server-side via feed_viewers + extended groups + nuclear snapshots.
+  // The old family selector is no longer needed for loading the feed list.
 
-  // Fetch initial feeds (10 terbaru)
+  // Fetch initial feeds (visible to current user via new visibility system)
   const fetchFeeds = async (isRefresh = false) => {
-    if (!selectedFamilyUuid) {
-      if (!isRefresh) setLoading(false);
-      return;
-    }
-
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
     try {
-      const res = await apiFetch(
-        `/api/feeds?family_uuid=${selectedFamilyUuid}&limit=10`,
-      );
+      // New endpoint: no family_uuid needed. Visibility is handled server-side via feed_viewers.
+      const res = await apiFetch(`/api/feeds?limit=10`);
       if (res.ok) {
         const data = await res.json();
 
         if (isRefresh) {
           const existingIds = new Set(feeds.map((f) => f.id));
-          const newOnes = data.filter((f: Feed) => !existingIds.has(f.id));
+          const newOnes = data.feeds.filter((f: Feed) => !existingIds.has(f.id));
 
           if (newOnes.length > 0) {
             setFeeds((prev) => [...newOnes, ...prev]);
           }
         } else {
-          setFeeds(data);
-          setHasMore(data.length === 10);
+          setFeeds(data.feeds || data);
+          setHasMore((data.feeds || data).length === 10);
         }
       }
     } catch (err) {
@@ -175,11 +151,10 @@ export default function FeedsPage() {
     }
   };
 
-  // Fetch feeds when family changes
+  // Initial fetch (no longer depends on selectedFamilyUuid)
   useEffect(() => {
-    if (!selectedFamilyUuid) return;
     fetchFeeds();
-  }, [selectedFamilyUuid]);
+  }, []);
 
   const toggleLike = async (feedId: string, currentlyLiked: boolean) => {
     try {
@@ -208,22 +183,23 @@ export default function FeedsPage() {
 
   // Load more older feeds (10 per click)
   const loadMore = async () => {
-    if (!selectedFamilyUuid || loadingMore || !hasMore || feeds.length === 0)
-      return;
+    if (loadingMore || !hasMore || feeds.length === 0) return;
 
     setLoadingMore(true);
 
     const oldestFeed = feeds[feeds.length - 1];
 
     try {
+      // New endpoint - no family_uuid
       const res = await apiFetch(
-        `/api/feeds?family_uuid=${selectedFamilyUuid}&limit=10&before=${oldestFeed.created_at}`,
+        `/api/feeds?limit=10&before=${oldestFeed.created_at}`,
       );
       if (res.ok) {
         const data = await res.json();
-        if (data.length > 0) {
-          setFeeds((prev) => [...prev, ...data]);
-          setHasMore(data.length === 10);
+        const newFeeds = data.feeds || data;
+        if (newFeeds.length > 0) {
+          setFeeds((prev) => [...prev, ...newFeeds]);
+          setHasMore(newFeeds.length === 10);
         } else {
           setHasMore(false);
         }
@@ -237,17 +213,17 @@ export default function FeedsPage() {
 
   // Pull to refresh / muat ulang feed terbaru
   const handleRefresh = async () => {
-    if (!selectedFamilyUuid || refreshing) return;
+    if (refreshing) return;
 
     setRefreshing(true);
     setNewFeedsCount(0);
 
     try {
-      const res = await apiFetch(
-        `/api/feeds?family_uuid=${selectedFamilyUuid}&limit=15`,
-      );
+      // New endpoint - no family_uuid
+      const res = await apiFetch(`/api/feeds?limit=15`);
       if (res.ok) {
-        const newData: Feed[] = await res.json();
+        const data = await res.json();
+        const newData: Feed[] = data.feeds || data;
 
         const existingIds = new Set(feeds.map((f) => f.id));
         const trulyNew = newData.filter((f) => !existingIds.has(f.id));
@@ -256,7 +232,6 @@ export default function FeedsPage() {
           setFeeds((prev) => [...trulyNew, ...prev]);
           setNewFeedsCount(trulyNew.length);
 
-          // Auto hide the "X feed baru" banner after 4 seconds
           setTimeout(() => setNewFeedsCount(0), 4000);
         }
       }
@@ -389,9 +364,8 @@ export default function FeedsPage() {
     setCardHeights((prev) => ({ ...prev, ...heights }));
   }, [flippedFeedId]);
 
-  // New scope icon (replaces getScopeLabel + getScopeColor)
   const getScopeIcon = (feed: Feed) => {
-    if (feed.scope_type === "small") {
+    if (feed.scope_type === "nuclear") {
       return (
         <div
           title="Keluarga Inti"
@@ -401,6 +375,17 @@ export default function FeedsPage() {
         </div>
       );
     }
+    if (feed.scope_type === "custom") {
+      return (
+        <div
+          title="Pilih Manual"
+          className="w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center"
+        >
+          <Users size={13} className="text-white" />
+        </div>
+      );
+    }
+    // extended (default)
     return (
       <div
         title="Keluarga Besar"
@@ -493,14 +478,12 @@ export default function FeedsPage() {
               Bagikan momen bersama keluarga
             </p>
 
-            {families.length > 0 && (
-              <Link
-                href="/feeds/new"
-                className="px-5 py-2.5 bg-[#4A7C59] hover:bg-[#2E5239] text-white rounded-2xl text-sm font-semibold shadow-md hover:shadow-lg transition"
-              >
-                + Momen
-              </Link>
-            )}
+            <Link
+              href="/feeds/new"
+              className="px-5 py-2.5 bg-[#4A7C59] hover:bg-[#2E5239] text-white rounded-2xl text-sm font-semibold shadow-md hover:shadow-lg transition"
+            >
+              + Momen
+            </Link>
           </div>
         </div>
 
@@ -517,37 +500,7 @@ export default function FeedsPage() {
           </div>
         )}
 
-        {/* Family selector */}
-        {families.length > 1 && (
-          <div className="px-4 mb-4">
-            <select
-              value={selectedFamilyUuid}
-              onChange={(e) => setSelectedFamilyUuid(e.target.value)}
-              className="w-full border border-[#D4C4A8] rounded-xl px-4 py-2 bg-[#FDFAF5]"
-            >
-              {families.map((f) => (
-                <option key={f.uuid} value={f.uuid}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {loadingFamilies ? (
-          <div className="text-center py-10 text-[#9C8B75]">
-            Memuat data keluarga...
-          </div>
-        ) : families.length === 0 ? (
-          <div className="text-center py-16 px-6">
-            <p className="text-[#6B5B45] text-lg">
-              Anda belum tergabung dalam keluarga manapun.
-            </p>
-            <p className="text-sm text-[#9C8B75] mt-2">
-              Silakan terima undangan keluarga terlebih dahulu.
-            </p>
-          </div>
-        ) : loading ? (
+        {loading ? (
           <div className="text-center py-10 text-[#9C8B75]">
             Memuat feeds...
           </div>
@@ -576,17 +529,15 @@ export default function FeedsPage() {
             </div>
 
             <h2 className="text-2xl font-semibold text-[#3B2F1E] mb-3">
-              Cerita keluarga ini baru saja dimulai
+              Belum ada momen
             </h2>
 
             <p className="max-w-md text-[#6B5B45] mb-2 leading-relaxed">
-              Belum ada momen yang dibagikan. Mulailah dengan berbagi foto,
-              video, atau cerita kecil hari ini.
+              Mulailah dengan berbagi foto, video, atau cerita kecil hari ini.
             </p>
 
             <p className="max-w-md text-sm text-[#9C8B75] mb-8">
-              Setiap foto dan cerita yang kamu bagikan akan menjadi bagian dari
-              sejarah keluarga kita.
+              Setiap momen yang kamu bagikan akan tersimpan dalam sejarah keluarga.
             </p>
 
             <Link
@@ -719,28 +670,55 @@ export default function FeedsPage() {
                     )}
 
                     {/* Action bar */}
-                    <div
-                      className="px-4 py-3 border-t border-[#D4C4A8] flex items-center 
-                    gap-5 text-sm"
-                    >
-                      <button
-                        onClick={() => toggleLike(feed.id, feed.has_liked)}
-                        className={`flex items-center gap-1.5 
-                        ${feed.has_liked ? "text-red-500" : "text-[#6B5B45]"}`}
-                      >
-                        <Heart
-                          className={feed.has_liked ? "fill-current" : ""}
-                          size={18}
-                        />
-                        <span>{feed.like_count}</span>
-                      </button>
-                      <button
-                        onClick={() => toggleFlip(feed.id)}
-                        className="flex items-center gap-1.5 text-[#6B5B45] hover:text-[#4A7C59] active:scale-[0.985] transition"
-                      >
-                        <MessageCircle size={18} />
-                        <span>{feed.comment_count}</span>
-                      </button>
+                    <div className="px-4 py-3 border-t border-[#D4C4A8] flex items-center justify-between text-sm">
+                      {/* Left: Like + Comment */}
+                      <div className="flex items-center gap-5">
+                        <button
+                          onClick={() => toggleLike(feed.id, feed.has_liked)}
+                          className={`flex items-center gap-1.5 ${feed.has_liked ? "text-red-500" : "text-[#6B5B45]"}`}
+                        >
+                          <Heart className={feed.has_liked ? "fill-current" : ""} size={18} />
+                          <span>{feed.like_count}</span>
+                        </button>
+                        <button
+                          onClick={() => toggleFlip(feed.id)}
+                          className="flex items-center gap-1.5 text-[#6B5B45] hover:text-[#4A7C59] active:scale-[0.985] transition"
+                        >
+                          <MessageCircle size={18} />
+                          <span>{feed.comment_count}</span>
+                        </button>
+                      </div>
+
+                      {/* Right: Viewers avatars (who can see this feed, excluding self) */}
+                      {feed.other_viewer_count && feed.other_viewer_count > 0 && (
+                        <div className="flex items-center -space-x-1.5">
+                          {feed.other_viewers?.slice(0, 4).map((viewer) => (
+                            <div
+                              key={viewer.id}
+                              className="w-6 h-6 rounded-full border border-white overflow-hidden ring-1 ring-[#D4C4A8] bg-[#EDE4D3] flex-shrink-0"
+                              title={viewer.full_name}
+                            >
+                              {viewer.photo_url ? (
+                                <img
+                                  src={viewer.photo_url}
+                                  alt={viewer.full_name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-[#D4C4A8]" />
+                              )}
+                            </div>
+                          ))}
+                          {(feed.other_viewer_count ?? 0) > 4 && (
+                            <div
+                              className="w-6 h-6 rounded-full bg-[#EDE4D3] text-[#6B5B45] text-[9px] font-medium flex items-center justify-center border border-white ring-1 ring-[#D4C4A8]"
+                              title={`${feed.other_viewer_count} orang bisa melihat`}
+                            >
+                              +{feed.other_viewer_count - 4}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

@@ -6,6 +6,11 @@ import {
   mergeExtendedGroupsOnMarriage,
   linkNodeToRelativeExtendedGroups 
 } from '@/lib/family/extended-groups';
+import {
+  calculateFirstMarriagePosition,
+  calculateWifePosition,
+  calculateChildPosition,
+} from '@/lib/tree/positioning';
 
 export async function POST(request: NextRequest) {
   const client = await pool.connect();
@@ -126,6 +131,29 @@ export async function POST(request: NextRequest) {
         const husbandNodeId = inviterGender === 'male' ? inviterNodeId : newNodeId;
         const wifeNodeId = inviterGender === 'female' ? inviterNodeId : newNodeId;
 
+        // ========== POSITIONING LOGIC (sama seperti jalur UUID accept) ==========
+        // Hanya pria yang mendapat posisi random saat pernikahan PERTAMA.
+        // Istri selalu ditempatkan di sebelah kanan suami.
+        const husbandPosRes = await client.query(
+          'SELECT position_x, position_y FROM nodes WHERE id = $1',
+          [husbandNodeId]
+        );
+        const husbandCurrentPos = husbandPosRes.rows[0];
+        const hx = husbandCurrentPos ? Number(husbandCurrentPos.position_x) : 0;
+        const hy = husbandCurrentPos ? Number(husbandCurrentPos.position_y) : 0;
+        const husbandHasPosition = (hx !== 0 || hy !== 0);
+
+        let husbandPosition: { x: number; y: number };
+        let wifePosition: { x: number; y: number };
+
+        if (!husbandHasPosition) {
+          husbandPosition = calculateFirstMarriagePosition({ id: husbandNodeId });
+          wifePosition = calculateWifePosition(husbandPosition);
+        } else {
+          husbandPosition = { x: hx, y: hy };
+          wifePosition = calculateWifePosition(husbandPosition);
+        }
+
         // Buat marriage
         const marriageRes = await client.query(
           `INSERT INTO marriages (husband_node_id, wife_node_id, status, created_at, updated_at)
@@ -154,12 +182,33 @@ export async function POST(request: NextRequest) {
           familyId = newFamily.rows[0].id;
         }
 
-        // Update current fields
+        // Update current fields + posisi (sama seperti jalur UUID)
         await client.query(
           `UPDATE nodes 
-           SET current_nuclear_family_id = $1, current_marriage_id = $2, updated_at = NOW()
+           SET current_nuclear_family_id = $1, 
+               current_marriage_id = $2,
+               position_x = CASE 
+                 WHEN id = $3 THEN $5 
+                 WHEN id = $4 THEN $7 
+                 ELSE position_x 
+               END,
+               position_y = CASE 
+                 WHEN id = $3 THEN $6 
+                 WHEN id = $4 THEN $8 
+                 ELSE position_y 
+               END,
+               updated_at = NOW()
            WHERE id IN ($3, $4)`,
-          [familyId, marriageId, husbandNodeId, wifeNodeId]
+          [
+            familyId, 
+            marriageId, 
+            husbandNodeId, 
+            wifeNodeId,
+            husbandPosition.x,
+            husbandPosition.y,
+            wifePosition.x,
+            wifePosition.y
+          ]
         );
 
         // Memberships
@@ -194,6 +243,34 @@ export async function POST(request: NextRequest) {
            VALUES ($1, $2, $3, NOW())`,
           [parentNodeId, newNodeId, parentType]
         );
+
+        // Update nuclear family snapshot (father-centric)
+        await client.query(`SELECT rebuild_active_nuclear_viewers($1)`, [parentNodeId]);
+        await client.query(`SELECT rebuild_active_nuclear_viewers($1)`, [newNodeId]);
+
+        // ========== POSITIONING LOGIC FOR CHILD (hanya ayah yang mengatur posisi) ==========
+        // Sama seperti jalur UUID accept. Ibu tidak mengubah posisi anak.
+        if (invitation.inviter_gender === 'male') {
+          const fatherPosRes = await client.query(
+            'SELECT position_x, position_y FROM nodes WHERE id = $1',
+            [parentNodeId]
+          );
+          const fatherPos = fatherPosRes.rows[0];
+
+          if (fatherPos) {
+            const fx = Number(fatherPos.position_x) || 0;
+            const fy = Number(fatherPos.position_y) || 0;
+
+            const childPosition = calculateChildPosition({ x: fx, y: fy }, 0);
+
+            await client.query(
+              `UPDATE nodes 
+               SET position_x = $1, position_y = $2, updated_at = NOW()
+               WHERE id = $3`,
+              [childPosition.x, childPosition.y, newNodeId]
+            );
+          }
+        }
 
         // A4: Wariskan extended group dari orang tua yang mengundang (sama seperti jalur accept)
         await linkNodeToRelativeExtendedGroups(client, newNodeId, parentNodeId);

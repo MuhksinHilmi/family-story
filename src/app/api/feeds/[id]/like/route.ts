@@ -5,7 +5,7 @@ import pool from '@/lib/db_helper';
 /**
  * POST /api/feeds/[id]/like
  * Like a feed post.
- * User must be a member of the family that owns the feed.
+ * Allowed only if the user can see the feed via feed_viewers snapshot.
  */
 export async function POST(
   request: NextRequest,
@@ -18,29 +18,29 @@ export async function POST(
   const { id: feedId } = await params;
 
   try {
-    // Get feed and its family_uuid
-    const feedRes = await pool.query(
-      `SELECT family_uuid FROM family_feeds WHERE id = $1`,
-      [feedId]
+    // Get current user's node
+    const nodeRes = await pool.query(
+      'SELECT id FROM nodes WHERE user_id = $1 LIMIT 1',
+      [userId]
     );
 
-    if (feedRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Feed tidak ditemukan' }, { status: 404 });
+    if (nodeRes.rows.length === 0) {
+      return NextResponse.json({ error: 'Anda belum memiliki node' }, { status: 403 });
     }
 
-    const familyUuid = feedRes.rows[0].family_uuid;
+    const viewerNodeId = nodeRes.rows[0].id;
 
-    // Validate membership (local schema uses family_id + join)
-    const memberCheck = await pool.query(
+    // Check feed exists + user can see it via snapshot
+    const accessCheck = await pool.query(
       `SELECT 1 
-       FROM family_members fm
-       JOIN families f ON f.id = fm.family_id
-       WHERE fm.user_id = $1 AND f.uuid = $2`,
-      [userId, familyUuid]
+       FROM feeds f
+       JOIN feed_viewers fv ON fv.feed_id = f.id
+       WHERE f.id = $1 AND fv.viewer_node_id = $2`,
+      [feedId, viewerNodeId]
     );
 
-    if (memberCheck.rows.length === 0) {
-      return NextResponse.json({ error: 'Anda bukan anggota keluarga ini' }, { status: 403 });
+    if (accessCheck.rows.length === 0) {
+      return NextResponse.json({ error: 'Feed tidak ditemukan atau Anda tidak memiliki akses' }, { status: 404 });
     }
 
     // Insert like (ignore if already liked)
@@ -73,28 +73,29 @@ export async function DELETE(
   const { id: feedId } = await params;
 
   try {
-    // Optional: still validate membership (or allow unlike even if left family?)
-    const feedRes = await pool.query(
-      `SELECT family_uuid FROM family_feeds WHERE id = $1`,
-      [feedId]
+    // Get current user's node
+    const nodeRes = await pool.query(
+      'SELECT id FROM nodes WHERE user_id = $1 LIMIT 1',
+      [userId]
     );
 
-    if (feedRes.rows.length === 0) {
-      return NextResponse.json({ error: 'Feed tidak ditemukan' }, { status: 404 });
+    if (nodeRes.rows.length === 0) {
+      return NextResponse.json({ error: 'Anda belum memiliki node' }, { status: 403 });
     }
 
-    const familyUuid = feedRes.rows[0].family_uuid;
+    const viewerNodeId = nodeRes.rows[0].id;
 
-    const memberCheck = await pool.query(
+    // Check access via feed_viewers (allow unlike if they could see it)
+    const accessCheck = await pool.query(
       `SELECT 1 
-       FROM family_members fm
-       JOIN families f ON f.id = fm.family_id
-       WHERE fm.user_id = $1 AND f.uuid = $2`,
-      [userId, familyUuid]
+       FROM feeds f
+       JOIN feed_viewers fv ON fv.feed_id = f.id
+       WHERE f.id = $1 AND fv.viewer_node_id = $2`,
+      [feedId, viewerNodeId]
     );
 
-    if (memberCheck.rows.length === 0) {
-      return NextResponse.json({ error: 'Anda bukan anggota keluarga ini' }, { status: 403 });
+    if (accessCheck.rows.length === 0) {
+      return NextResponse.json({ error: 'Feed tidak ditemukan atau Anda tidak memiliki akses' }, { status: 404 });
     }
 
     // Remove like

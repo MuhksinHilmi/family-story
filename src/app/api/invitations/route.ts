@@ -302,6 +302,139 @@ export async function POST(request: NextRequest) {
             { status: 409 }
           );
         }
+
+        // Cegah mengundang pasangan orang tua sebagai anak (arah salah)
+        // Contoh: anak mengundang istri ayahnya sebagai "anak" → tidak boleh
+        const inviterParentsRes = await client.query(
+          `SELECT parent_node_id FROM parent_child_relations 
+           WHERE child_node_id = $1`,
+          [invited_by_node_id]
+        );
+
+        for (const p of inviterParentsRes.rows) {
+          const parentId = p.parent_node_id;
+          const marriageCheck = await client.query(
+            `SELECT 1 FROM marriages 
+             WHERE status = 'married'
+               AND ((husband_node_id = $1 AND wife_node_id = $2) 
+                 OR (husband_node_id = $2 AND wife_node_id = $1))`,
+            [parentId, targetNodeId]
+          );
+          if (marriageCheck.rows.length > 0) {
+            return NextResponse.json(
+              { error: 'Orang ini sudah menjadi pasangan dari orang tua Anda' },
+              { status: 409 }
+            );
+          }
+        }
+
+        // Cegah mengundang orang tua mertua (atau sebaliknya)
+        // A. Target adalah orang tua dari pasangan inviter?
+        const inviterSpousesRes = await client.query(
+          `SELECT 
+             CASE WHEN husband_node_id = $1 THEN wife_node_id 
+                  ELSE husband_node_id 
+             END as spouse_id
+           FROM marriages 
+           WHERE status = 'married' 
+             AND (husband_node_id = $1 OR wife_node_id = $1)`,
+          [invited_by_node_id]
+        );
+
+        for (const row of inviterSpousesRes.rows) {
+          const spouseId = row.spouse_id;
+          const spouseParentsRes = await client.query(
+            `SELECT 1 FROM parent_child_relations 
+             WHERE child_node_id = $1 AND parent_node_id = $2`,
+            [spouseId, targetNodeId]
+          );
+          if (spouseParentsRes.rows.length > 0) {
+            return NextResponse.json(
+              { error: 'Orang ini adalah orang tua dari pasangan Anda' },
+              { status: 409 }
+            );
+          }
+        }
+
+        // B. Inviter adalah pasangan dari salah satu anak target? (inviter = menantu)
+        const targetChildrenRes = await client.query(
+          `SELECT child_node_id FROM parent_child_relations 
+           WHERE parent_node_id = $1`,
+          [targetNodeId]
+        );
+
+        for (const row of targetChildrenRes.rows) {
+          const childId = row.child_node_id;
+          const isSpouseOfChild = await client.query(
+            `SELECT 1 FROM marriages 
+             WHERE status = 'married'
+               AND ((husband_node_id = $1 AND wife_node_id = $2) 
+                 OR (husband_node_id = $2 AND wife_node_id = $1))`,
+            [childId, invited_by_node_id]
+          );
+          if (isSpouseOfChild.rows.length > 0) {
+            return NextResponse.json(
+              { error: 'Orang ini sudah memiliki menantu (Anda adalah pasangan anaknya)' },
+              { status: 409 }
+            );
+          }
+        }
+
+        // C & D: Cegah undangan orang tua mertua / menantu silang yang lebih dalam
+        // (kasus: istri anak mengundang istri ayah, atau sebaliknya)
+        for (const row of inviterSpousesRes.rows) {
+          const spouseId = row.spouse_id;
+
+          // C. Target = pasangan dari orang tua pasangan inviter
+          //    (contoh: Avida mengundang Liliya = istri ayah Muhksin)
+          const spouseParentsRes2 = await client.query(
+            `SELECT parent_node_id FROM parent_child_relations 
+             WHERE child_node_id = $1`,
+            [spouseId]
+          );
+
+          for (const p of spouseParentsRes2.rows) {
+            const parentId = p.parent_node_id;
+            const parentSpouseCheck = await client.query(
+              `SELECT 1 FROM marriages 
+               WHERE status = 'married'
+                 AND ((husband_node_id = $1 AND wife_node_id = $2) 
+                   OR (husband_node_id = $2 AND wife_node_id = $1))`,
+              [parentId, targetNodeId]
+            );
+            if (parentSpouseCheck.rows.length > 0) {
+              return NextResponse.json(
+                { error: 'Orang ini adalah pasangan dari orang tua pasangan Anda' },
+                { status: 409 }
+              );
+            }
+          }
+
+          // D. Target = pasangan dari anak pasangan inviter
+          //    (contoh: Liliya mengundang Avida = istri anak Kharis)
+          const spouseChildrenRes = await client.query(
+            `SELECT child_node_id FROM parent_child_relations 
+             WHERE parent_node_id = $1`,
+            [spouseId]
+          );
+
+          for (const c of spouseChildrenRes.rows) {
+            const childId = c.child_node_id;
+            const childSpouseCheck = await client.query(
+              `SELECT 1 FROM marriages 
+               WHERE status = 'married'
+                 AND ((husband_node_id = $1 AND wife_node_id = $2) 
+                   OR (husband_node_id = $2 AND wife_node_id = $1))`,
+              [childId, targetNodeId]
+            );
+            if (childSpouseCheck.rows.length > 0) {
+              return NextResponse.json(
+                { error: 'Orang ini adalah pasangan dari anak pasangan Anda' },
+                { status: 409 }
+              );
+            }
+          }
+        }
       }
     }
 
