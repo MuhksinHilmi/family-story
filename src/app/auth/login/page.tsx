@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import { rootStyles } from "@/components/ui/design-system";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<"email" | "otp">("email");
@@ -68,7 +69,10 @@ export default function LoginPage() {
       if (response.ok) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
-        window.location.href = "/feeds";
+        const next = searchParams.get('next') || '/feeds';
+        // decode next if it was encoded earlier
+        const destination = next ? decodeURIComponent(next) : '/feeds';
+        window.location.href = destination;
       } else {
         setError(data.error || "OTP salah");
       }

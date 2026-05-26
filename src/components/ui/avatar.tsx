@@ -8,7 +8,7 @@ const Avatar = React.forwardRef<
   <span
     ref={ref}
     className={cn(
-      'relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full',
+      'relative flex items-center justify-center h-10 w-10 shrink-0 overflow-hidden rounded-full',
       className
     )}
     {...props}

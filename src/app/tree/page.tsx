@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useEffect, useMemo, useRef } from "react";
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   ReactFlow,
   Node,
@@ -28,6 +29,9 @@ import { apiFetch } from "@/lib/api-client";
 
 export default function TreePage() {
   const { user, isLoading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const focusName = searchParams.get('focus_name') || null;
   const [firstSelectedNodeId, setFirstSelectedNodeId] = useState<string | null>(
     null,
   );
@@ -131,6 +135,32 @@ export default function TreePage() {
       fetchPendingInvitations();
     }
   }, [user, authLoading, loadUserNode]);
+
+  // Focus by name from query param (e.g., /tree?focus_name=John)
+  useEffect(() => {
+    if (!focusName || nodes.length === 0) return;
+
+    const name = decodeURIComponent(focusName).toLowerCase();
+    // try find exact match first
+    let target = nodes.find((n) => (n.data.full_name || '').toLowerCase() === name);
+    if (!target) {
+      // partial match
+      target = nodes.find((n) => (n.data.full_name || '').toLowerCase().includes(name));
+    }
+
+    if (target && reactFlowInstance) {
+      // center and open detail
+      const { x, y } = target.position;
+      reactFlowInstance.setCenter(x, y, { zoom: 1.2, duration: 600 });
+      setDetailNodeId(String(target.id));
+      setIsDetailOpen(true);
+
+      // remove query param to avoid repeated focus on reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete('focus_name');
+      router.replace(url.pathname + url.search, { scroll: false });
+    }
+  }, [focusName, nodes, reactFlowInstance]);
 
   // A4: One-time trigger on first load of the tree page (or after full refresh)
   // Automatically load nodes from the user's extended groups on initial view.

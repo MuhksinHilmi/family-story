@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db_helper';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { requireAuth } from '@/lib/auth';
@@ -61,6 +61,23 @@ export async function PUT(request: NextRequest) {
     let photoUrl: string | undefined;
 
     if (photoFile) {
+      // Delete previous profile photo file if exists
+      try {
+        const prevRes = await pool.query('SELECT photo_url FROM users WHERE id = $1', [userId]);
+        const prevUrl = prevRes.rows[0]?.photo_url;
+        if (prevUrl) {
+          const prevPath = path.join(process.cwd(), 'public', prevUrl.replace(/^\//, ''));
+          try {
+            await unlink(prevPath);
+          } catch (e) {
+            // ignore if file doesn't exist
+            console.warn('Previous profile file delete failed (may not exist)', prevPath);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to lookup previous profile photo', e);
+      }
+
       const bytes = await photoFile.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
@@ -121,33 +138,33 @@ export async function PUT(request: NextRequest) {
 
     const result = await pool.query(query, values);
 
-    // Also update family_nodes if needed (keep tree avatars in sync)
-    const syncFields: string[] = [];
-    const syncValues: any[] = [];
-    let syncIdx = 1;
+    // Sync to nodes table (new 2026-clean schema - used by feed viewers, tree, etc.)
+    const nodeSyncFields: string[] = [];
+    const nodeSyncValues: any[] = [];
+    let nodeIdx = 1;
 
     if (full_name !== undefined) {
-      syncFields.push(`full_name = $${syncIdx++}`);
-      syncValues.push(full_name);
+      nodeSyncFields.push(`full_name = $${nodeIdx++}`);
+      nodeSyncValues.push(full_name);
     }
     if (gender !== undefined) {
-      syncFields.push(`gender = $${syncIdx++}`);
-      syncValues.push(gender);
+      nodeSyncFields.push(`gender = $${nodeIdx++}`);
+      nodeSyncValues.push(gender);
     }
     if (birth_date !== undefined) {
-      syncFields.push(`birth_date = $${syncIdx++}`);
-      syncValues.push(birth_date);
+      nodeSyncFields.push(`birth_date = $${nodeIdx++}`);
+      nodeSyncValues.push(birth_date);
     }
     if (photoUrl) {
-      syncFields.push(`photo_url = $${syncIdx++}`);
-      syncValues.push(photoUrl);
+      nodeSyncFields.push(`photo_url = $${nodeIdx++}`);
+      nodeSyncValues.push(photoUrl);
     }
 
-    if (syncFields.length > 0) {
-      syncValues.push(userId);
+    if (nodeSyncFields.length > 0) {
+      nodeSyncValues.push(userId);
       await pool.query(
-        `UPDATE family_nodes SET ${syncFields.join(', ')} WHERE user_id = $${syncIdx}`,
-        syncValues
+        `UPDATE nodes SET ${nodeSyncFields.join(', ')} WHERE user_id = $${nodeIdx}`,
+        nodeSyncValues
       );
     }
 
