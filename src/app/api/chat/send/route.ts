@@ -63,43 +63,45 @@ export async function POST(request: NextRequest) {
 
     // 3. Insert FIRST into local Postgres `messages` (permanent source of truth)
     //    This guarantees the message is saved even if Supabase is down or slow.
-    const localResult = await pool.query(
-      `INSERT INTO messages (
-        family_uuid, scope_type, small_family_id,
-        sender_id, sender_name_snapshot, sender_photo_snapshot,
-        body, type, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING id, family_uuid, scope_type, small_family_id,
-                sender_id, sender_name_snapshot, sender_photo_snapshot,
-                body, type, created_at`,
-      [
-        chatRoom.family_uuid,
-        chatRoom.scope_type,
-        smallFamilyId,
-        userUuid,
-        senderName,
-        senderPhoto,
-        content,
-        'text',
-        now,
-      ]
-    );
+      const localResult = await pool.query(
+       `INSERT INTO messages (
+         family_uuid, scope_type, small_family_id, chat_room_id,
+         sender_id, sender_name_snapshot, sender_photo_snapshot,
+         body, type, created_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, family_uuid, scope_type, small_family_id, chat_room_id,
+                 sender_id, sender_name_snapshot, sender_photo_snapshot,
+                 body, type, created_at`,
+       [
+         chatRoom.family_uuid,
+         chatRoom.scope_type,
+         smallFamilyId,
++        chatRoom.id,
+         userUuid,
+         senderName,
+         senderPhoto,
+         content,
+         'text',
+         now,
+       ]
+     );
 
     const localMessage = localResult.rows[0];
 
     // 4. Insert into Supabase (only for realtime broadcast + short retention)
     //    If this fails, the message is still safe in local DB.
     try {
-      await supabase.from('messages').insert({
-        family_uuid: chatRoom.family_uuid,
-        scope_type: chatRoom.scope_type,
-        small_family_id: smallFamilyId,
-        sender_id: userUuid,
-        sender_name_snapshot: senderName,
-        sender_photo_snapshot: senderPhoto,
-        body: content,
-        created_at: now,
-      });
+await supabase.from('messages').insert({
+         room_id: chatRoom.id, // new: include room_id UUID in supabase payload
+         family_uuid: chatRoom.family_uuid,
+         scope_type: chatRoom.scope_type,
+         small_family_id: smallFamilyId,
+         sender_id: userUuid,
+         sender_name_snapshot: senderName,
+         sender_photo_snapshot: senderPhoto,
+         body: content,
+         created_at: now,
+       });
     } catch (supabaseErr) {
       // Message already saved locally — we can retry later or let a reconciler job handle it.
       console.warn('[Chat Send] Supabase insert failed (message safe in local DB):', supabaseErr);

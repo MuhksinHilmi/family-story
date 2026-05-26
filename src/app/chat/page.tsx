@@ -64,12 +64,8 @@ export default function ChatPage() {
 
     supabase.realtime.setAuth(token);
 
-    const smallId =
-      currentRoom.small_family_uuid || currentRoom.small_family_id;
-    const topic =
-      currentRoom.scope_type === "general"
-        ? `family:${currentRoom.family_uuid}:general`
-        : `family:${currentRoom.family_uuid}:small:${smallId}`;
+    const smallId = currentRoom.small_family_uuid || currentRoom.small_family_id;
+    const topic = `chat_room:${currentRoom.id}`;
 
     const channel = supabase
       .channel(topic, { config: { private: true } })
@@ -90,12 +86,14 @@ export default function ChatPage() {
         // Tentukan apakah pesan realtime ini untuk room yang sedang dibuka
         const isForCurrentRoom =
           currentRoom &&
-          msg.family_uuid === currentRoom.family_uuid &&
-          msg.scope_type === currentRoom.scope_type &&
-          (msg.small_family_id || null) ===
-            (currentRoom.small_family_uuid ||
-              currentRoom.small_family_id ||
-              null);
+          (msg.room_id ? msg.room_id === currentRoom.id : (
+            msg.family_uuid === currentRoom.family_uuid &&
+            msg.scope_type === currentRoom.scope_type &&
+            (msg.small_family_id || null) ===
+              (currentRoom.small_family_uuid ||
+                currentRoom.small_family_id ||
+                null)
+          ));
 
         if (isForCurrentRoom) {
           markRoomAsRead(currentRoom.id, msg.id);
