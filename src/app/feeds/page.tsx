@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo } from "react";
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from "next/link";
 import {
   Heart,
@@ -18,6 +19,10 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api-client";
+import dynamic from 'next/dynamic';
+const FocusedFeedModal = dynamic(() => import('./FocusedFeedModal'), { ssr: false });
+import { renderWithMentions } from '@/lib/mentions';
+
 
 interface Feed {
   id: string;
@@ -70,13 +75,43 @@ export default function FeedsPage() {
   const frontRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [cardHeights, setCardHeights] = useState<Record<string, number>>({});
 
+  // comment input refs and mention autocomplete state (single active feed at a time)
+  const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [extendedContacts, setExtendedContacts] = useState<any[]>([]);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionActive, setMentionActive] = useState(0);
+  const [mentionAnchorIndex, setMentionAnchorIndex] = useState<number | null>(null);
+  const [mentionFeedId, setMentionFeedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchContacts = async () => {
+      try {
+        const res = await apiFetch('/api/user/extended-contacts');
+        if (res.ok) {
+          const data = await res.json();
+          setExtendedContacts(data.contacts || []);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch extended contacts for feed mentions', e);
+      }
+    };
+    fetchContacts();
+  }, []);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Image preview modal state
   const [preview, setPreview] = useState<{ feed: Feed; index: number } | null>(null);
 
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const firstName = user?.full_name?.split(" ")[0] || "Kamu";
+
+  // focused feed modal state
+  const [focusedFeed, setFocusedFeed] = useState<Feed | null>(null);
+  const focusIdFromUrl = searchParams.get("focus");
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -156,6 +191,47 @@ export default function FeedsPage() {
   useEffect(() => {
     fetchFeeds();
   }, []);
+
+  // If focus param present, fetch focused feed
+  useEffect(() => {
+    const fid = focusIdFromUrl;
+    if (!fid) return;
+
+    // wait for auth to finish loading; if user not logged in, API returns 401 and we redirect
+    if (authLoading) return;
+
+    const fetchFocused = async () => {
+      try {
+        console.log('DEBUG: attempting fetch focused feed, focusId=', fid);
+        const res = await apiFetch(`/api/feeds/${fid}`);
+        console.log('DEBUG: focused fetch status=', res.status);
+        if (res.ok) {
+          const data = await res.json();
+          console.log('DEBUG: focused feed data=', data?.id);
+          setFocusedFeed(data);
+          return;
+        }
+
+        // If unauthorized, redirect to login preserving next param
+        if (res.status === 401) {
+          const next = encodeURIComponent(window.location.pathname + window.location.search);
+          // Defer navigation to avoid interfering with React render/hook ordering
+          setTimeout(() => {
+            window.location.href = `/auth/login?next=${next}`;
+          }, 0);
+          return;
+        }
+
+        // other errors: remove focus param
+        const url = new URL(window.location.href);
+        url.searchParams.delete('focus');
+        router.replace(url.pathname + url.search, { scroll: false });
+      } catch (e) {
+        console.warn('Failed to load focused feed', e);
+      }
+    };
+    fetchFocused();
+  }, [focusIdFromUrl, authLoading]);
 
   const toggleLike = async (feedId: string, currentlyLiked: boolean) => {
     try {
@@ -364,6 +440,35 @@ export default function FeedsPage() {
     });
     setCardHeights((prev) => ({ ...prev, ...heights }));
   }, [flippedFeedId]);
+
+  const filteredMentionOptions = () => extendedContacts
+    .filter((p: any) => p.full_name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    .slice(0, 8);
+
+  const selectMentionForFeed = (feedId: string, person: any) => {
+    const cur = commentText[feedId] || '';
+    if (mentionAnchorIndex == null || mentionFeedId !== feedId) return;
+    const before = cur.slice(0, mentionAnchorIndex);
+    const afterStart = mentionAnchorIndex + 1 + (mentionQuery ? mentionQuery.length : 0);
+    const after = cur.slice(afterStart);
+    const insert = `@${person.full_name} `;
+    const newText = before + insert + after;
+    setCommentText((prev) => ({ ...prev, [feedId]: newText }));
+    setShowMentionDropdown(false);
+    setMentionQuery('');
+    setMentionFeedId(null);
+
+    // set caret
+    setTimeout(() => {
+      const el = commentInputRefs.current[feedId];
+      if (el) {
+        const pos = before.length + insert.length;
+        el.focus();
+        el.setSelectionRange(pos, pos);
+      }
+    }, 0);
+  };
+
 
   const getScopeIcon = (feed: Feed) => {
     if (feed.scope_type === "nuclear") {
@@ -666,7 +771,7 @@ export default function FeedsPage() {
                     {/* Caption */}
                     {feed.caption && (
                       <div className="px-4 py-3 text-sm text-[#3B2F1E] whitespace-pre-line">
-                        {feed.caption}
+                        {renderWithMentions(feed.caption, (name:string)=>{ const q=encodeURIComponent(name); router.push(`/tree?focus_name=${q}`); })}
                       </div>
                     )}
 
@@ -692,11 +797,11 @@ export default function FeedsPage() {
 
                       {/* Right: Viewers avatars (who can see this feed, excluding self) */}
                       {feed.other_viewer_count && feed.other_viewer_count > 0 && (
-                        <div className="flex items-center -space-x-1.5 flex-shrink-0 max-w-[160px] overflow-hidden">
+                        <div className="flex items-center -space-x-1.5 flex-shrink-0 max-w-[160px] overflow-hidden p-2">
                           {feed.other_viewers?.slice(0, 9).map((viewer) => (
                             <Avatar
                               key={viewer.id}
-                              className="w-6 h-6 border border-white ring-1 ring-[#D4C4A8]"
+                              className="w-8 h-8 border border-white ring-1 ring-[#D4C4A8]"
                               title={viewer.full_name}
                             >
                               {viewer.photo_url && <AvatarImage src={viewer.photo_url} alt={viewer.full_name} />}
@@ -727,7 +832,7 @@ export default function FeedsPage() {
                       transform: "rotateY(180deg)",
                       height: cardHeights[feed.id] ? `${cardHeights[feed.id]}px` : "100%",
                     }}
-                    className="w-full bg-[#FDFAF5] border border-[#D4C4A8] rounded-2xl overflow-hidden shadow-sm flex flex-col"
+                    className="w-full bg-[#FDFAF5] border border-[#D4C4A8] rounded-2xl overflow-visible shadow-sm flex flex-col"
                   >
                     {/* Header belakang card */}
                     <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-[#D4C4A8] bg-white">
@@ -773,7 +878,7 @@ export default function FeedsPage() {
                                 {comment.user_name}
                               </p>
                               <p className="text-sm text-[#4B3B2A] leading-snug mt-0.5">
-                                {comment.content}
+                                {renderWithMentions(comment.content)}
                               </p>
                               <p className="text-[10px] text-[#B0A090] mt-1">
                                 {new Date(comment.created_at).toLocaleDateString("id-ID", {
@@ -791,18 +896,64 @@ export default function FeedsPage() {
 
                     {/* Input comment */}
                     <div className="flex-shrink-0 px-4 py-3 border-t border-[#D4C4A8] bg-white flex gap-2">
-                      <input
-                        type="text"
-                        value={commentText[feed.id] || ""}
-                        onChange={(e) =>
-                          setCommentText((prev) => ({ ...prev, [feed.id]: e.target.value }))
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") submitComment(feed.id);
-                        }}
-                        placeholder="Tulis komentar..."
-                        className="flex-1 text-sm px-3 py-2 rounded-xl border border-[#D4C4A8] bg-[#FDFAF5] focus:outline-none focus:ring-1 focus:ring-[#4A7C59] text-[#3B2F1E] placeholder:text-[#B0A090]"
-                      />
+                      <div className="relative flex-1">
+                        <input
+                          ref={(el) => (commentInputRefs.current[feed.id] = el)}
+                          type="text"
+                          value={commentText[feed.id] || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCommentText((prev) => ({ ...prev, [feed.id]: val }));
+
+                            // detect mention token before caret
+                            const input = e.target as HTMLInputElement;
+                            const cursor = input.selectionStart || 0;
+                            const pre = val.slice(0, cursor);
+                            const m = pre.match(/@([\w\.-]*)$/);
+                            if (m) {
+                              setMentionQuery(m[1]);
+                              setShowMentionDropdown(true);
+                              setMentionAnchorIndex(cursor - m[1].length - 1);
+                              setMentionActive(0);
+                              setMentionFeedId(feed.id);
+                            } else if (mentionFeedId === feed.id) {
+                              setMentionQuery('');
+                              setShowMentionDropdown(false);
+                              setMentionAnchorIndex(null);
+                              setMentionFeedId(null);
+                            }
+                          }
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              if (showMentionDropdown && mentionFeedId === feed.id && filteredMentionOptions().length > 0) {
+                                e.preventDefault();
+                                selectMentionForFeed(feed.id, filteredMentionOptions()[0]);
+                                return;
+                              }
+                              submitComment(feed.id);
+                            }
+                            if (showMentionDropdown && mentionFeedId === feed.id) {
+                              if (e.key === 'ArrowDown') { e.preventDefault(); setMentionActive((s) => Math.min(s+1, Math.max(0, filteredMentionOptions().length-1))); }
+                              if (e.key === 'ArrowUp') { e.preventDefault(); setMentionActive((s) => Math.max(0, s-1)); }
+                              if (e.key === 'Escape') { setShowMentionDropdown(false); setMentionFeedId(null); }
+                            }
+                          }}
+                          placeholder="Tulis komentar..."
+                          className="w-full text-sm px-3 py-2 rounded-xl border border-[#D4C4A8] bg-[#FDFAF5] focus:outline-none focus:ring-1 focus:ring-[#4A7C59] text-[#3B2F1E] placeholder:text-[#B0A090]"
+                        />
+
+                        {showMentionDropdown && mentionFeedId === feed.id && (
+                          <div className="absolute left-0 z-50 w-full rounded-xl border border-[#D4C4A8] bg-white shadow-lg max-h-48 overflow-auto" style={{ bottom: 'calc(100% + 8px)' }}>
+                            {filteredMentionOptions().length > 0 ? filteredMentionOptions().map((p, i) => (
+                              <button key={p.id} type="button" onClick={() => selectMentionForFeed(feed.id, p)} className={`flex items-center gap-3 px-3 py-2 text-left text-sm ${i === mentionActive ? 'bg-[#F5F0E8]' : ''}`}>
+                                <div className="h-8 w-8 rounded-full bg-[#EDE4D3] flex-shrink-0 overflow-hidden flex items-center justify-center">{p.photo_url ? <img src={p.photo_url} className="w-full h-full object-cover"/> : <span className="text-[#6B5B45] text-xs font-semibold">{p.full_name[0].toUpperCase()}</span>}</div>
+                                <div>{p.full_name}</div>
+                              </button>
+                            )) : (<div className="px-3 py-2 text-sm text-[#9C8B75]">Tidak ada yang cocok</div>)}
+                          </div>
+                        )}
+                      </div>
                       <button
                         onClick={() => submitComment(feed.id)}
                         disabled={!commentText[feed.id]?.trim()}
@@ -832,6 +983,19 @@ export default function FeedsPage() {
           <p className="text-center text-xs text-[#9C8B75] py-6">
             — Semua feed sudah dimuat —
           </p>
+        )}
+
+        {/* Focused feed modal (from email link) */}
+        {focusedFeed && (
+          <FocusedFeedModal
+            feed={focusedFeed}
+            onClose={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('focus');
+              router.replace(url.pathname + url.search, { scroll: false });
+              setFocusedFeed(null);
+            }}
+          />
         )}
 
         {/* Elegant Image Preview Modal */}
