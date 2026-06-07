@@ -16,14 +16,13 @@ import { FamilyNodeData } from "@/types";
 import { Node } from "@xyflow/react";
 import {
   Mail,
-  Phone,
   Calendar,
   User,
   Send,
   Heart,
   Users,
   Trash2,
-  Cake,
+  Unlock,
 } from "lucide-react";
 
 interface NodeDetailModalProps {
@@ -34,6 +33,8 @@ interface NodeDetailModalProps {
   onReinvite?: (nodeId: string) => void;
   onDelete?: (nodeId: string) => void;
   currentUserId?: string;
+  currentUserNodeUuid?: string | null;
+  onBreakClick?: (nodeId: string, relatedNodeId: string | null, relationshipType: 'spouse' | 'father' | 'mother' | 'child' | null) => void;
 }
 
 export function NodeDetailModal({
@@ -44,6 +45,8 @@ export function NodeDetailModal({
   onReinvite,
   onDelete,
   currentUserId,
+  currentUserNodeUuid,
+  onBreakClick,
 }: NodeDetailModalProps) {
   const [isReinviting, setIsReinviting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -184,7 +187,7 @@ export function NodeDetailModal({
         </DialogHeader>
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <div className="w-16 h-16 rounded-full overflow-hidden border">
+            <div className="w-16 h-16 rounded-full overflow-hidden border border-[#D4C4A8]">
               {node.photo_url ? (
                 <img
                   src={node.photo_url}
@@ -219,33 +222,78 @@ export function NodeDetailModal({
             {node.invitation_email && (
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-[#9C8B75]" />
-                <span className="text-sm">{node.invitation_email}</span>
+                <span className="text-sm text-[#3B2F1E]">{node.invitation_email}</span>
+              </div>
+            )}
+            {spouseName && (
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Heart className="h-4 w-4 text-[#9C8B75]" />
+                  <span className="text-sm text-[#3B2F1E]">
+                    {isHusband ? "Istri" : "Suami"}: {spouseName}
+                  </span>
+                </div>
+                {/* Show break button if current user can break this marriage */}
+                {onBreakClick && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onBreakClick(node.id, node.spouse_ids?.[0] || null, 'spouse');
+                    }}
+                    className="p-1 rounded hover:bg-[#F5E8C8] text-[#C4922A] transition-colors"
+                    title="Putuskan hubungan pernikahan"
+                  >
+                    <Unlock className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             )}
             {hasFather && (
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-[#9C8B75]" />
-                <span className="text-sm">Ayah: {fatherName}</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-[#9C8B75]" />
+                  <span className="text-sm text-[#3B2F1E]">Ayah: {fatherName}</span>
+                </div>
+                {/* Show break button for father relationship */}
+                {onBreakClick && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onBreakClick(node.id, node.father_id || null, 'father');
+                    }}
+                    className="p-1 rounded hover:bg-[#F5E8C8] text-[#C4922A] transition-colors"
+                    title="Putuskan hubungan ayah"
+                  >
+                    <Unlock className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             )}
             {hasMother && (
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-[#9C8B75]" />
-                <span className="text-sm">Ibu kandung: {motherName}</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-[#9C8B75]" />
+                  <span className="text-sm text-[#3B2F1E]">Ibu kandung: {motherName}</span>
+                </div>
+                {/* Show break button for mother relationship */}
+                {onBreakClick && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onBreakClick(node.id, node.mother_id || null, 'mother');
+                    }}
+                    className="p-1 rounded hover:bg-[#F5E8C8] text-[#C4922A] transition-colors"
+                    title="Putuskan hubungan ibu"
+                  >
+                    <Unlock className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             )}
             {node.birth_date && (
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-[#9C8B75]" />
-                <span className="text-sm">Lahir: {formatBirthDate(node.birth_date)}</span>
-              </div>
-            )}
-            {spouseName && (
-              <div className="flex items-center gap-2">
-                <Heart className="h-4 w-4 text-[#9C8B75]" />
-                <span className="text-sm">
-                  {isHusband ? "Istri" : "Suami"}: {spouseName}
-                </span>
+                <span className="text-sm text-[#3B2F1E]">Lahir: {formatBirthDate(node.birth_date)}</span>
               </div>
             )}
             {hasChildren && (
@@ -253,7 +301,7 @@ export function NodeDetailModal({
                 <Users className="h-4 w-4 text-[#9C8B75] mt-0.5" />
                 <div className="flex flex-col gap-1">
                   {children.map((child, index) => (
-                    <span key={child.id} className="text-sm">
+                    <span key={child.id} className="text-sm text-[#3B2F1E]">
                       Anak {index + 1}: {child.name}
                       <span
                         className={`${child.gender === "male" ? "text-[#4A7C59]" : "text-[#8B6F47]"} inline-block ml-2`}
@@ -269,7 +317,7 @@ export function NodeDetailModal({
             {siblings.length > 0 && (
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-[#9C8B75]" />
-                <span className="text-sm">
+                <span className="text-sm text-[#3B2F1E]">
                   Saudara kandung: {siblings.join(", ")}
                 </span>
               </div>
@@ -305,7 +353,7 @@ export function NodeDetailModal({
 
           {showConfirm && (
             <div className="border-t pt-4">
-              <Label className="text-sm font-medium">
+              <Label className="text-sm font-medium text-[#3B2F1E]">
                 Ketik "HAPUS" untuk konfirmasi
               </Label>
               <Input

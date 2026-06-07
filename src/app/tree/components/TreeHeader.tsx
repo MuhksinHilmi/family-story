@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api-client";
-import { UserPlus, Share2, GitFork, Link, Mail } from "lucide-react";
+import { UserPlus, Share2, GitFork, Link, Mail, AlertCircle } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
+import { BreakRequestConfirmModal } from "./BreakRequestConfirmModal";
 
 interface TreeHeaderProps {
   familyUuid: string | null;
@@ -13,6 +14,7 @@ interface TreeHeaderProps {
   onInviteNewUser: () => void;
   onShareLink: () => void;
   onInvitationSelect: (inv: any) => void;
+  onBreakRequestProcessed: () => void;
 }
 
 export function TreeHeader({
@@ -22,11 +24,57 @@ export function TreeHeader({
   onInviteNewUser,
   onShareLink,
   onInvitationSelect,
+  onBreakRequestProcessed,
 }: TreeHeaderProps) {
   const [showUuidInvite, setShowUuidInvite] = useState(false);
   const [inviteUuid, setInviteUuid] = useState("");
   const [inviteRelationship, setInviteRelationship] = useState<"spouse" | "child">("child");
   const [isBellOpen, setIsBellOpen] = useState(false);
+
+  // Break request state
+  const [breakRequests, setBreakRequests] = useState<any[]>([]);
+  const [showBreakRequestModal, setShowBreakRequestModal] = useState(false);
+  const [selectedBreakRequest, setSelectedBreakRequest] = useState<any>(null);
+  const [isBreakBellOpen, setIsBreakBellOpen] = useState(false);
+  const breakBellRef = useRef<HTMLDivElement>(null);
+
+  // Close break bell dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (breakBellRef.current && !breakBellRef.current.contains(event.target as Node)) {
+        setIsBreakBellOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Fetch break requests
+  useEffect(() => {
+    const fetchBreakRequests = async () => {
+      try {
+        const res = await apiFetch("/api/tree/break-request");
+        if (res.ok) {
+          const data = await res.json();
+          setBreakRequests(data.break_requests || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch break requests:", error);
+      }
+    };
+
+    const interval = setInterval(fetchBreakRequests, 30000); // Refresh every 30s
+    fetchBreakRequests();
+
+    // Listen for break requests updated event
+    const handler = () => fetchBreakRequests();
+    window.addEventListener("break-requests-updated", handler);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("break-requests-updated", handler);
+    };
+  }, []);
 
   const bellRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +125,14 @@ export function TreeHeader({
     }
   };
 
+  const handleBreakRequestSelect = (req: any) => {
+    setSelectedBreakRequest(req);
+    setShowBreakRequestModal(true);
+    setIsBreakBellOpen(false);
+  };
+
   const count = pendingInvitations.length;
+  const breakCount = breakRequests.length;
 
   return (
     <>
@@ -128,6 +183,48 @@ export function TreeHeader({
             <span className="hidden sm:inline ml-1.5">Bagikan Link</span>
           </Button>
 
+          {/* Break Request Bell */}
+          <div className="relative" ref={breakBellRef}>
+            <button
+              onClick={() => setIsBreakBellOpen(!isBreakBellOpen)}
+              className="relative flex h-9 w-9 items-center justify-center rounded-full border border-[#C4922A] bg-[#F5E8C8] text-[#C4922A] hover:bg-[#EAD8B8]"
+              aria-label="Permintaan Putus Hubungan"
+            >
+              <AlertCircle className="h-4 w-4" />
+              {breakCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#C4922A] px-1.5 text-[10px] font-semibold text-white">
+                  {breakCount}
+                </span>
+              )}
+            </button>
+
+            {isBreakBellOpen && (
+              <div className="absolute right-0 mt-2 w-72 bg-[#FDFAF5] border border-[#D4C4A8] rounded-lg shadow-lg z-50 py-2">
+                {breakRequests.length === 0 ? (
+                  <div className="px-4 py-3 text-sm text-[#6B5B45]">
+                    Tidak ada permintaan putus hubungan.
+                  </div>
+                ) : (
+                  breakRequests.map((req, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleBreakRequestSelect(req)}
+                      className="w-full text-left px-4 py-2.5 hover:bg-[#F5F0E8] text-sm flex flex-col gap-0.5"
+                    >
+                      <span className="font-medium text-[#3B2F1E]">
+                        {req.requester?.full_name || "Seseorang"}
+                      </span>
+                      <span className="text-[#6B5B45] text-xs">
+                        Meminta putus hubungan (
+                        {req.reason === "divorce" ? "Cerai" : "Data salah"})
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Notification Bell */}
           <NotificationBell
             count={count}
@@ -145,7 +242,7 @@ export function TreeHeader({
       {/* UUID Invite Modal */}
       {showUuidInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-[480px] min-w-[360px] animate-[slideIn_200ms_ease-out] rounded-2xl border border-[#D4C4A8] bg-white p-6 shadow-lg">
+          <div className="w-full max-w-[480px] min-w-[360px] animate-[slideIn_200ms_ease-out] rounded-2xl border border-[#D4C4A8] bg-[#FDFAF5] p-6 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-[#3B2F1E]">Undang via UUID</h3>
               <button
@@ -169,7 +266,7 @@ export function TreeHeader({
                   placeholder="550e8400-e29b-41d4-a716-446655440000"
                   value={inviteUuid}
                   onChange={(e) => setInviteUuid(e.target.value)}
-                  className="w-full rounded-md border border-[#D4C4A8] bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-[#4A7C59]"
+                  className="w-full rounded-md border border-[#D4C4A8] bg-[#EDE4D3] px-3 py-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-[#4A7C59]"
                 />
               </div>
 
@@ -182,7 +279,7 @@ export function TreeHeader({
                   onChange={(e) =>
                     setInviteRelationship(e.target.value as "spouse" | "child")
                   }
-                  className="w-full rounded-md border border-[#D4C4A8] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4A7C59]"
+                  className="w-full rounded-md border border-[#D4C4A8] bg-[#EDE4D3] px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#4A7C59]"
                 >
                   <option value="child">Saya sebagai Orang Tua</option>
                   <option value="spouse">Sebagai Pasangan</option>
@@ -237,6 +334,17 @@ export function TreeHeader({
           </div>
         </div>
       )}
+
+      {/* Break Request Confirm Modal */}
+      <BreakRequestConfirmModal
+        open={showBreakRequestModal}
+        onClose={() => {
+          setShowBreakRequestModal(false);
+          setSelectedBreakRequest(null);
+        }}
+        breakRequest={selectedBreakRequest}
+        onSuccess={onBreakRequestProcessed}
+      />
     </>
   );
 }

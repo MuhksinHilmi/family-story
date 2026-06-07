@@ -99,10 +99,10 @@ export default function DocumentsPage() {
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [docToShare, setDocToShare] = useState<DocumentItem | null>(null);
 
-  // Langkah 1: State untuk pilihan visibility di modal
-  const [selectedVisibility, setSelectedVisibility] = useState<
-    "private" | "family" | "small_family" | "specific_users"
-  >("private");
+// Langkah 1: State untuk pilihan visibility di modal
+   const [selectedVisibility, setSelectedVisibility] = useState<
+     "private" | "family" | "small_family" | "extended" | "specific_users"
+   >("private");
 
   // State untuk multi-select "Orang Tertentu"
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>(
@@ -632,15 +632,16 @@ export default function DocumentsPage() {
             {/* Status Saat Ini */}
             <div className="mb-4 p-3 bg-[#F5F0E8] rounded-xl text-sm">
               <span className="text-[#6B5B45]">Status saat ini: </span>
-              <span className="font-medium text-[#3B2F1E]">
-                {docToShare.visibility_scope === "private" &&
-                  "Private (Hanya Anda)"}
-                {docToShare.visibility_scope === "family" && "Keluarga Besar"}
-                {docToShare.visibility_scope === "small_family" &&
-                  "Keluarga Inti"}
-                {docToShare.visibility_scope === "specific_users" &&
-                  "Orang Tertentu"}
-              </span>
+<span className="font-medium text-[#3B2F1E]">
+                 {docToShare.visibility_scope === "private" &&
+                   "Private (Hanya Anda)"}
+                 {docToShare.visibility_scope === "family" && "Keluarga Besar"}
+                 {docToShare.visibility_scope === "extended" && "Keluarga Besar (Extended)"}
+                 {docToShare.visibility_scope === "small_family" &&
+                   "Keluarga Inti"}
+                 {docToShare.visibility_scope === "specific_users" &&
+                   "Orang Tertentu"}
+               </span>
             </div>
 
             <div className="space-y-2 mb-6">
@@ -715,6 +716,31 @@ export default function DocumentsPage() {
                   </div>
                   <div className="text-xs text-[#6B5B45]">
                     Hanya anggota keluarga inti tertentu yang bisa melihat.
+                  </div>
+                </div>
+              </label>
+
+              {/* Keluarga Besar */}
+              <label
+                onClick={() => setSelectedVisibility("extended")}
+                className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                  selectedVisibility === "extended"
+                    ? "border-[#4A7C59] bg-[#EDE4D3]"
+                    : "border-[#D4C4A8]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  checked={selectedVisibility === "extended"}
+                  onChange={() => setSelectedVisibility("extended")}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-medium text-[#3B2F1E]">
+                    Keluarga Besar
+                  </div>
+                  <div className="text-xs text-[#6B5B45]">
+                    Semua anggota keluarga besar bisa melihat dokumen ini.
                   </div>
                 </div>
               </label>

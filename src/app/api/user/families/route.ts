@@ -4,8 +4,8 @@ import pool from "@/lib/db_helper";
 
 /**
  * GET /api/user/families
- * Returns all families that the authenticated user belongs to.
- * This endpoint is reusable across the app (feeds, chat, settings, etc.)
+ * Returns all nuclear families that the authenticated user belongs to.
+ * Uses new 2026 schema (nuclear_families + nuclear_family_memberships)
  */
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -17,15 +17,16 @@ export async function GET(request: NextRequest) {
     const result = await pool.query(
       `
       SELECT 
-        f.id,
-        f.uuid,
-        f.name,
-        fm.role,
-        fm.joined_at
-      FROM family_members fm
-      JOIN families f ON f.id = fm.family_id
-      WHERE fm.user_id = $1
-      ORDER BY fm.joined_at DESC
+        nf.id,
+        nf.uuid,
+        nf.name,
+        nfm.role,
+        nfm.joined_at
+      FROM nuclear_family_memberships nfm
+      JOIN nuclear_families nf ON nf.id = nfm.nuclear_family_id
+      JOIN nodes n ON n.id = nfm.node_id
+      WHERE n.user_id = $1
+      ORDER BY nfm.joined_at DESC
       `,
       [userId]
     );

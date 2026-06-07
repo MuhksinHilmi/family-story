@@ -199,4 +199,5 @@ psql -d family_story -f db/migrations/002_create_chat_rooms.sql
 
 ---
 
-Butuh bantuan setup VPS atau Docker? Tinggal bilang.
+MAIL Local:
+npx maildev --web 8025 --smtp 1025

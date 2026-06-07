@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate visibility_scope
-    const validScopes = ['private', 'family', 'small_family', 'specific_users'];
+    const validScopes = ['private', 'family', 'small_family', 'specific_users', 'extended'];
     if (!validScopes.includes(visibilityScope)) {
       return NextResponse.json({ error: 'visibility_scope tidak valid' }, { status: 400 });
     }
@@ -92,20 +92,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // === VALIDASI MEMBERSHIP ===
-    const memberCheck = await pool.query(
-      `SELECT 1 FROM family_members fm
-       JOIN families f ON f.id = fm.family_id
-       WHERE fm.user_id = $1 AND f.uuid = $2`,
-      [userId, familyUuid]
-    );
+// === VALIDASI MEMBERSHIP === (check nuclear family membership)
+     const memberCheck = await pool.query(
+       `SELECT 1 FROM nuclear_family_memberships nfm
+        JOIN nuclear_families nf ON nf.id = nfm.nuclear_family_id
+        WHERE nfm.node_id = (SELECT id FROM nodes WHERE user_id = $1 LIMIT 1)
+          AND nf.uuid = $2`,
+       [userId, familyUuid]
+     );
 
-    if (memberCheck.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'Anda bukan anggota keluarga ini' },
-        { status: 403 }
-      );
-    }
+     if (memberCheck.rows.length === 0) {
+       return NextResponse.json(
+         { error: 'Anda bukan anggota keluarga ini' },
+         { status: 403 }
+       );
+     }
 
     // === CEK KUOTA STORAGE 500MB ===
     const usageRes = await pool.query(
@@ -209,42 +210,47 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'family_uuid wajib' }, { status: 400 });
   }
 
-  // Pastikan user adalah anggota keluarga
-  const memberCheck = await pool.query(
-    `SELECT 1 FROM family_members fm
-     JOIN families f ON f.id = fm.family_id
-     WHERE fm.user_id = $1 AND f.uuid = $2`,
-    [userId, familyUuid]
-  );
+// Pastikan user adalah anggota keluarga
+   const memberCheck = await pool.query(
+     `SELECT 1 FROM nuclear_family_memberships nfm
+      JOIN nuclear_families nf ON nf.id = nfm.nuclear_family_id
+      WHERE nfm.node_id = (SELECT id FROM nodes WHERE user_id = $1 LIMIT 1)
+        AND nf.uuid = $2`,
+     [userId, familyUuid]
+   );
 
-  if (memberCheck.rows.length === 0) {
-    return NextResponse.json({ error: 'Bukan anggota keluarga' }, { status: 403 });
-  }
+   if (memberCheck.rows.length === 0) {
+     return NextResponse.json({ error: 'Bukan anggota keluarga' }, { status: 403 });
+   }
 
-  // Ambil dokumen yang boleh dilihat user ini + nama uploader
-  const docsRes = await pool.query(
-    `SELECT 
-       d.id, d.family_uuid, d.uploaded_by, d.file_name, d.original_name, 
-       d.file_path, d.file_size, d.mime_type, d.visibility_scope, 
-       d.small_family_uuid, d.recipient_user_ids, d.description, d.created_at,
-       u.full_name as uploader_name
-     FROM family_documents d
-     LEFT JOIN users u ON u.id = d.uploaded_by
-     WHERE d.family_uuid = $1
-       AND (
-         d.uploaded_by = $2
-         OR d.visibility_scope = 'family'
-         OR (d.visibility_scope = 'small_family' AND EXISTS (
-               SELECT 1 FROM chat_rooms cr
-               WHERE cr.family_uuid = $1
-                 AND cr.scope_type = 'small'
-                 AND cr.small_family_uuid = d.small_family_uuid
-             ))
-         OR (d.visibility_scope = 'specific_users' AND $2 = ANY(d.recipient_user_ids))
-       )
-     ORDER BY d.created_at DESC`,
-    [familyUuid, userId]
-  );
+// Ambil dokumen yang boleh dilihat user ini + nama uploader
+    // 'family' = nuclear family members only  
+    // 'extended' = all extended family members (via node_extended_groups)
+    
+    const docsRes = await pool.query(
+      `SELECT 
+         d.id, d.family_uuid, d.uploaded_by, d.file_name, d.original_name, 
+         d.file_path, d.file_size, d.mime_type, d.visibility_scope, 
+         d.small_family_uuid, d.recipient_user_ids, d.description, d.created_at,
+         u.full_name as uploader_name
+       FROM family_documents d
+       LEFT JOIN users u ON u.id = d.uploaded_by
+       WHERE d.family_uuid = $1
+         AND (
+           d.uploaded_by = $2
+           OR d.visibility_scope = 'family'
+           OR d.visibility_scope = 'extended'
+           OR (d.visibility_scope = 'small_family' AND EXISTS (
+                 SELECT 1 FROM chat_rooms cr
+                 WHERE cr.family_uuid = $1
+                   AND cr.scope_type = 'small'
+                   AND cr.small_family_uuid = d.small_family_uuid
+               ))
+           OR (d.visibility_scope = 'specific_users' AND $2 = ANY(d.recipient_user_ids))
+         )
+       ORDER BY d.created_at DESC`,
+      [familyUuid, userId]
+    );
 
   const documents = docsRes.rows.map((d) => ({
     ...d,
@@ -310,7 +316,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'id dan visibility_scope wajib' }, { status: 400 });
     }
 
-    const validScopes = ['private', 'family', 'small_family', 'specific_users'];
+    const validScopes = ['private', 'family', 'small_family', 'specific_users', 'extended'];
     if (!validScopes.includes(visibility_scope)) {
       return NextResponse.json({ error: 'visibility_scope tidak valid' }, { status: 400 });
     }

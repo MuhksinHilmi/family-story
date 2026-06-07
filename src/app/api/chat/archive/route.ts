@@ -27,52 +27,83 @@ export async function GET(request: NextRequest) {
 
   try {
     // Resolve the logical room key from chat_rooms (family_uuid + scope_type + small_family_id)
-  const room = await getChatRoomById(roomId);
+    const room = await getChatRoomById(roomId);
     if (!room) {
       return NextResponse.json({ error: 'Chat room tidak ditemukan' }, { status: 404 });
     }
 
     // Prefer querying by chat_room_id when available
-    const params: any[] = [roomId];
-    let query = `
-      SELECT 
-        id,
-        family_uuid,
-        scope_type,
-        small_family_id,
-        chat_room_id,
-        sender_id,
-        sender_name_snapshot,
-        sender_photo_snapshot,
-        body,
-        type,
-        created_at,
-        deleted
-      FROM messages
-      WHERE chat_room_id = $1
-        AND (deleted = false OR deleted IS NULL)
-    `;
-
-    // If latest flag, order desc limit; else asc pagination (before)
-
-
-    if (before) {
-      query += ` AND created_at < $2`;
-      params.push(before);
-    }
-
+    let messagesRes;
+    
     if (latest) {
       // Return the most recent messages (for initial load after refresh)
-      query += ` ORDER BY created_at DESC LIMIT $3`;
-      params.push(limit);
+      messagesRes = await pool.query(
+        `SELECT 
+           id,
+           family_uuid,
+           scope_type,
+           small_family_id,
+           chat_room_id,
+           sender_id,
+           sender_name_snapshot,
+           sender_photo_snapshot,
+           body,
+           type,
+           created_at,
+           deleted
+         FROM messages
+         WHERE chat_room_id = $1
+           AND (deleted = false OR deleted IS NULL)
+         ORDER BY created_at DESC LIMIT $2`,
+        [roomId, limit]
+      );
     } else {
-      query += ` ORDER BY created_at ASC LIMIT $3 OFFSET $4`;
-      params.push(limit, 0);
+      // Ascending pagination (before cursor)
+      messagesRes = before
+        ? await pool.query(
+            `SELECT 
+               id,
+               family_uuid,
+               scope_type,
+               small_family_id,
+               chat_room_id,
+               sender_id,
+               sender_name_snapshot,
+               sender_photo_snapshot,
+               body,
+               type,
+               created_at,
+               deleted
+             FROM messages
+             WHERE chat_room_id = $1
+               AND created_at < $2
+               AND (deleted = false OR deleted IS NULL)
+             ORDER BY created_at ASC LIMIT $3 OFFSET $4`,
+            [roomId, before, limit, 0]
+          )
+        : await pool.query(
+            `SELECT 
+               id,
+               family_uuid,
+               scope_type,
+               small_family_id,
+               chat_room_id,
+               sender_id,
+               sender_name_snapshot,
+               sender_photo_snapshot,
+               body,
+               type,
+               created_at,
+               deleted
+             FROM messages
+             WHERE chat_room_id = $1
+               AND (deleted = false OR deleted IS NULL)
+             ORDER BY created_at ASC LIMIT $2 OFFSET $3`,
+            [roomId, limit, 0]
+          );
     }
 
-    const result = await pool.query(query, params);
-
-    return NextResponse.json(result.rows, { status: 200 });
+    return NextResponse.json(messagesRes.rows, { status: 200 });
   } catch (error) {
     console.error('[Archive] Error:', error);
     return NextResponse.json({ error: 'Gagal mengambil pesan' }, { status: 500 });

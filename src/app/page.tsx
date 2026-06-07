@@ -10,19 +10,12 @@ export default function LandingPage() {
         {/* Navigation */}
         <nav className="lp-nav">
           <Link href="/" className="lp-brand">
-            <svg
-              className="lp-brand-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 22V12M12 12C12 12 8 10 6 6M12 12C12 12 16 10 18 6M6 6C8 4 10 2 12 2C14 2 16 4 18 6" />
-              <path d="M8 18C9.5 17 11 16.5 12 16.5C13 16.5 14.5 17 16 18" />
-            </svg>
-            CeritaKeluarga
+            <img
+              src="/images/logo-cerita-keluarga.png"
+              alt="logo"
+              className="mx-auto mb-4 w-20 h-20 object-contain"
+            />
+            Cerita Keluarga
           </Link>
           <div className="lp-nav-links">
             <Link href="/auth/login" className="lp-btn-ghost">
@@ -366,8 +359,8 @@ export default function LandingPage() {
 
         {/* Footer */}
         <footer className="lp-footer">
-          <div className="lp-footer-brand">CeritaKeluarga</div>
-          <p>2026 CeritaKeluarga. Semua hak dilindungi.</p>
+          <div className="lp-footer-brand">Cerita Keluarga</div>
+          <p>2026 Cerita Keluarga. Semua hak dilindungi.</p>
         </footer>
       </div>
     </>

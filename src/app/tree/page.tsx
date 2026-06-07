@@ -22,6 +22,7 @@ import { FamilyNode } from "./components/FamilyNode";
 import { AddNodeModal } from "./components/AddNodeModal";
 import { NodeDetailModal } from "./components/NodeDetailModal";
 import { InvitationConfirmModal } from "./components/InvitationConfirmModal";
+import { BreakRelationshipModal } from "./components/BreakRelationshipModal";
 import { TreeHeader } from "./components/TreeHeader";
 import { useFamilyTree } from "./hooks/useFamilyTree";
 import { useAuth } from "@/context/auth-context";
@@ -42,6 +43,13 @@ export default function TreePage() {
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
   const [selectedInvitation, setSelectedInvitation] = useState<any>(null);
   const [isInvitationModalOpen, setIsInvitationModalOpen] = useState(false);
+
+  // Break relationship modal state
+  const [breakModalNodeId, setBreakModalNodeId] = useState<string | null>(null);
+  const [breakModalRelatedNodeId, setBreakModalRelatedNodeId] = useState<string | null>(null);
+  const [breakModalRelatedNodeName, setBreakModalRelatedNodeName] = useState<string | null>(null);
+  const [breakModalRelationshipType, setBreakModalRelationshipType] = useState<'spouse' | 'father' | 'mother' | 'child' | null>(null);
+  const [isBreakModalOpen, setIsBreakModalOpen] = useState(false);
 
   // Loading state for "Undang User Baru" (email invite)
   const [isSendingInvitation, setIsSendingInvitation] = useState(false);
@@ -284,6 +292,24 @@ export default function TreePage() {
     }
   }, [nodes, addRelatedNodes]);
 
+  // === Handle break button click - open modal to select reason ===
+  const handleBreakClick = useCallback((nodeId: string, relatedNodeId: string | null, relationshipType: 'spouse' | 'father' | 'mother' | 'child' | null) => {
+    if (!relatedNodeId || !relationshipType) {
+      alert("Node ini tidak memiliki hubungan yang bisa diputuskan.");
+      return;
+    }
+    
+    // Find related node name from nodes
+    const relatedNode = nodes.find(n => n.id === relatedNodeId);
+    const relatedName = relatedNode?.data?.full_name || "Orang tua";
+    
+    setBreakModalNodeId(nodeId);
+    setBreakModalRelatedNodeId(relatedNodeId);
+    setBreakModalRelatedNodeName(relatedName);
+    setBreakModalRelationshipType(relationshipType);
+    setIsBreakModalOpen(true);
+  }, [nodes]);
+
   // Fase 5: Global lazy load (capped)
   const handleGlobalLoadMore = useCallback(async () => {
     setIsGlobalLoading(true);
@@ -316,7 +342,7 @@ export default function TreePage() {
           (node as any).siblings_names = siblings;
         }
 
-        // Safety: ensure critical arrays exist on incrementally loaded nodes
+// Safety: ensure critical arrays exist on incrementally loaded nodes
         node.spouse_ids = node.spouse_ids || [];
         node.children_ids = node.children_ids || [];
         node.father_id = node.father_id ?? null;
@@ -460,6 +486,7 @@ export default function TreePage() {
               setSelectedInvitation(inv);
               setIsInvitationModalOpen(true);
             }}
+            onBreakRequestProcessed={fetchPendingInvitations}
           />
 
           {/* Fase 5: Global lazy load button (only when there are unexplored nodes) */}
@@ -506,16 +533,17 @@ export default function TreePage() {
         title="Undang User Baru"
       />
 
-      <NodeDetailModal
+<NodeDetailModal
         open={isDetailOpen}
         onClose={() => {
           setIsDetailOpen(false);
           setDetailNodeId(null);
         }}
-         nodeId={detailNodeId}
-         nodes={nodesWithNasab}
-         onDelete={deleteNode}
-         currentUserId={user?.id}
+        nodeId={detailNodeId}
+        nodes={nodesWithNasab}
+        onDelete={deleteNode}
+        currentUserId={user?.id}
+        onBreakClick={handleBreakClick}
       />
 
       {/* Invitation Confirmation Modal */}
@@ -532,6 +560,33 @@ export default function TreePage() {
           window.dispatchEvent(new CustomEvent("invitations-updated"));
 
           // Reload the full tree using the current user's node (new schema path)
+          if (user) {
+            loadUserNode(
+              user.id,
+              user.full_name,
+              user.gender || "male",
+              user.birth_date,
+            );
+          }
+        }}
+      />
+
+      {/* Break Relationship Modal */}
+      <BreakRelationshipModal
+        open={isBreakModalOpen}
+        onClose={() => {
+          setIsBreakModalOpen(false);
+          setBreakModalNodeId(null);
+          setBreakModalRelatedNodeId(null);
+          setBreakModalRelatedNodeName(null);
+          setBreakModalRelationshipType(null);
+        }}
+        nodeId={breakModalNodeId}
+        relatedNodeId={breakModalRelatedNodeId}
+        relatedNodeName={breakModalRelatedNodeName}
+        relationshipType={breakModalRelationshipType}
+        onSuccess={() => {
+          // Reload the tree
           if (user) {
             loadUserNode(
               user.id,

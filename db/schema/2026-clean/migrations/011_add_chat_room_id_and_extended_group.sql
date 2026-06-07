@@ -18,5 +18,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_chat_rooms_ext_group_scope
   ON chat_rooms(extended_group_id, scope_type)
   WHERE extended_group_id IS NOT NULL;
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_chat_rooms_family_general
+  ON chat_rooms(family_uuid, scope_type)
+  WHERE scope_type = 'general';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_chat_rooms_small_family_scope
+  ON chat_rooms(small_family_uuid, scope_type)
+  WHERE small_family_uuid IS NOT NULL AND scope_type = 'small';
+
 COMMENT ON COLUMN messages.chat_room_id IS 'Optional reference to chat_rooms.id (UUID). Prefer this over family_uuid-based queries.';
 COMMENT ON COLUMN chat_rooms.extended_group_id IS 'Reference to extended_family_groups.id to identify a general room per extended group.';

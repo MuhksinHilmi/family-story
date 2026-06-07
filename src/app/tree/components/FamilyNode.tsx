@@ -8,13 +8,12 @@ interface FamilyNodeProps {
   data: FamilyNodeData;
   selected: boolean;
   onInfoClick?: (nodeId: string) => void;
-  onStartConnection?: (nodeId: string) => void;
   onReload?: (nodeId: string) => void;
   showReloadButton?: boolean;
   isReloading?: boolean;
 }
 
-export const FamilyNode = memo(({ data, selected, onInfoClick, onStartConnection, onReload, showReloadButton, isReloading }: FamilyNodeProps) => {
+export const FamilyNode = memo(({ data, selected, onInfoClick, onReload, showReloadButton, isReloading }: FamilyNodeProps) => {
   const isDeceased = data.is_alive === false;
   const isPending = data.invitation_status === 'pending';
   const isSelected = selected;

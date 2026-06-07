@@ -1,4 +1,25 @@
-import pool from '@/lib/db_helper';
+import { getOrCreateGeneralRoomForExtendedGroup, getOrCreateSmallRoom } from '@/lib/db_helper/chat';
+
+/**
+ * Helper: Get nuclear family UUID and husband's user UUID for small room creation
+ */
+async function getSmallRoomInfo(client: any, husbandNodeId: number): Promise<{ familyUuid: string | null; husbandUserUuid: string | null; husbandName: string | null }> {
+  const res = await client.query(
+    `SELECT nf.uuid as family_uuid, n.uuid as node_uuid, n.full_name as husband_name
+     FROM nodes n
+     LEFT JOIN nuclear_families nf ON nf.id = n.current_nuclear_family_id
+     WHERE n.id = $1`,
+    [husbandNodeId]
+  );
+  if (res.rows[0]) {
+    return {
+      familyUuid: res.rows[0].family_uuid,
+      husbandUserUuid: res.rows[0].node_uuid,
+      husbandName: res.rows[0].husband_name,
+    };
+  }
+  return { familyUuid: null, husbandUserUuid: null, husbandName: null };
+}
 
 /**
  * Extended Family Groups Helper
@@ -119,6 +140,13 @@ export async function mergeExtendedGroupsOnMarriage(
     const newGroupId = await createNewExtendedGroup(client);
     await addNodeToExtendedGroups(client, husbandNodeId, [newGroupId]);
     await addNodeToExtendedGroups(client, wifeNodeId, [newGroupId]);
+    // Buat chat room general untuk extended group ini
+    const { familyUuid, husbandUserUuid, husbandName } = await getSmallRoomInfo(client, husbandNodeId);
+    await getOrCreateGeneralRoomForExtendedGroup(client, newGroupId, familyUuid, husbandName || null);
+    // Buat small room untuk keluarga inti
+    if (husbandUserUuid) {
+      await getOrCreateSmallRoom(client, familyUuid, husbandUserUuid, husbandName || null);
+    }
     return;
   }
 
@@ -184,12 +212,24 @@ export async function linkNodeToRelativeExtendedGroups(
   // Komponen "existing family" = groups dari existing + spouse
   const existingFamilyGroups = Array.from(new Set([...existingGroups, ...spouseGroups]));
 
-  // === Kasus 1: Kedua pihak belum punya group → buat baru dan berikan ke new + existing family
+// === Kasus 1: Kedua pihak belum punya group → buat baru dan berikan ke new + existing family
   if (existingFamilyGroups.length === 0 && newPersonGroups.length === 0) {
     const newGroupId = await createNewExtendedGroup(client);
     await addNodeToExtendedGroups(client, newNodeId, [newGroupId]);
     await addNodeToExtendedGroups(client, existingRelatedNodeId, [newGroupId]);
     if (spouseId) await addNodeToExtendedGroups(client, spouseId, [newGroupId]);
+    // Buat chat room general untuk extended group ini
+    // Tentukan husband node: jika existingRelatedNode adalah laki-laki, gunakan dia; jika wanita, gunakan suaminya
+    const existingGender = await client.query('SELECT gender FROM nodes WHERE id = $1', [existingRelatedNodeId]);
+    const isExistingHusband = existingGender.rows[0]?.gender === 'male';
+    const husbandNodeId = isExistingHusband ? existingRelatedNodeId : spouseId;
+    if (husbandNodeId) {
+      const { familyUuid, husbandUserUuid, husbandName } = await getSmallRoomInfo(client, husbandNodeId);
+      await getOrCreateGeneralRoomForExtendedGroup(client, newGroupId, familyUuid, husbandName || null);
+      if (husbandUserUuid) {
+        await getOrCreateSmallRoom(client, familyUuid, husbandUserUuid, husbandName || null);
+      }
+    }
     return;
   }
 

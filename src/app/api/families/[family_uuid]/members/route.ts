@@ -4,8 +4,9 @@ import pool from '@/lib/db_helper';
 
 /**
  * GET /api/families/[family_uuid]/members
- * Returns all members of a family (for mention, etc.).
+ * Returns all members of a nuclear family (for mention, etc.).
  * User must be a member of the family to access this.
+ * Uses new 2026 schema (nuclear_families + nuclear_family_memberships + nodes)
  */
 export async function GET(
   request: NextRequest,
@@ -18,12 +19,13 @@ export async function GET(
   const { family_uuid } = await params;
 
   try {
-    // Check if user is member of this family (local schema: family_members uses family_id)
+    // Check if user is member of this family
     const memberCheck = await pool.query(
       `SELECT 1 
-       FROM family_members fm
-       JOIN families f ON f.id = fm.family_id
-       WHERE fm.user_id = $1 AND f.uuid = $2`,
+       FROM nuclear_family_memberships nfm
+       JOIN nuclear_families nf ON nf.id = nfm.nuclear_family_id
+       JOIN nodes n ON n.id = nfm.node_id
+       WHERE n.user_id = $1 AND nf.uuid = $2`,
       [userId, family_uuid]
     );
 
@@ -31,21 +33,22 @@ export async function GET(
       return NextResponse.json({ error: 'Anda bukan anggota keluarga ini' }, { status: 403 });
     }
 
-    // Get all family members (from family_nodes + users)
+    // Get all family members (nodes with user link)
     const membersRes = await pool.query(
       `
       SELECT 
-        fn.id as node_id,
+        n.id as node_id,
         u.id as user_id,
         u.uuid,
-        fn.full_name,
+        n.full_name,
         u.photo_url,
-        fn.gender
-      FROM family_nodes fn
-      LEFT JOIN users u ON u.id = fn.user_id
-      JOIN families f ON f.id = fn.family_id
-      WHERE f.uuid = $1
-      ORDER BY fn.full_name ASC
+        n.gender
+      FROM nuclear_family_memberships nfm
+      JOIN nodes n ON n.id = nfm.node_id
+      LEFT JOIN users u ON u.id = n.user_id
+      JOIN nuclear_families nf ON nf.id = nfm.nuclear_family_id
+      WHERE nf.uuid = $1
+      ORDER BY n.full_name ASC
       `,
       [family_uuid]
     );

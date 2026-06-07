@@ -13,34 +13,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const chatRoom = await getChatRoomById(room_id);
-    if (!chatRoom) {
-      return NextResponse.json({ error: 'Chat room tidak ditemukan' }, { status: 404 });
-    }
-
     const supabase = initSupabaseServer();
 
-    // Query Supabase using the logical room key (no room_id column since 2026 cleanup)
+    // Query Supabase using room_id
     let query = supabase
       .from('messages')
       .select(`
-        id, family_uuid, scope_type, small_family_id,
+        id, room_id, family_uuid, scope_type, small_family_id,
         sender_id, sender_name_snapshot, sender_photo_snapshot,
         body, created_at
       `)
-      .eq('family_uuid', chatRoom.family_uuid)
-      .eq('scope_type', chatRoom.scope_type);
+      .eq('room_id', room_id)
+      .order('created_at', { ascending: true })
+      .limit(limit);
 
-    const smallId = chatRoom.small_family_uuid || chatRoom.small_family_id;
-
-    if (smallId == null) {
-      query = query.is('small_family_id', null);
-    } else {
-      query = query.eq('small_family_id', smallId);
-    }
-
-    query = query.order('created_at', { ascending: true }).limit(limit);
-    
     if (cutoff) {
       query = query.gte('created_at', cutoff);
     }

@@ -898,7 +898,7 @@ export default function FeedsPage() {
                     <div className="flex-shrink-0 px-4 py-3 border-t border-[#D4C4A8] bg-white flex gap-2">
                       <div className="relative flex-1">
                         <input
-                          ref={(el) => (commentInputRefs.current[feed.id] = el)}
+                          ref={el => { commentInputRefs.current[feed.id] = el; }}
                           type="text"
                           value={commentText[feed.id] || ""}
                           onChange={(e) => {

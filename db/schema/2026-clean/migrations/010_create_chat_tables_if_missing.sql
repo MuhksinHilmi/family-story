@@ -1,4 +1,4 @@
--- db/schema/2026-clean/migrations/009_create_chat_tables_if_missing.sql
+-- db/schema/2026-clean/migrations/010_create_chat_tables_if_missing.sql
 -- Ensure minimal chat tables exist before running later migrations that alter them.
 -- This migration is safe to run on an existing DB (creates tables only if missing).
 
@@ -39,5 +39,5 @@ CREATE INDEX IF NOT EXISTS idx_messages_chat_room_id ON messages(chat_room_id);
 CREATE INDEX IF NOT EXISTS idx_messages_family_created_at ON messages(family_uuid, created_at DESC);
 
 -- 3) Ensure minimal permissions/comments (non-destructive)
-COMMENT ON TABLE IF EXISTS chat_rooms IS 'Chat rooms (UUID) used as logical chat identifiers for local chat and mapping to extended groups.';
-COMMENT ON TABLE IF EXISTS messages IS 'Permanent local messages (source of truth). Transient Supabase messages replicate here via sync job.';
+COMMENT ON TABLE chat_rooms IS 'Chat rooms (UUID) used as logical chat identifiers for local chat and mapping to extended groups.';
+COMMENT ON TABLE messages IS 'Permanent local messages (source of truth). Transient Supabase messages replicate here via sync job.';

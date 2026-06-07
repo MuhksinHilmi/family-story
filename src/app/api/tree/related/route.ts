@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
         [finalRelatedIds]
       );
 
-      // Attach father_id and mother_id so nasab_line can be computed client-side
+      // Attach father_id, mother_id, spouse_ids and children_ids for NodeDetailModal
       const pcrRes = await client.query(
         `SELECT parent_node_id, child_node_id, parent_type
          FROM parent_child_relations
@@ -132,7 +132,25 @@ export async function POST(request: NextRequest) {
         [finalRelatedIds]
       );
 
+      // Also fetch children (parents as parents) and spouses for these nodes
+      const childrenAndSpousesRes = await client.query(
+        `SELECT parent_node_id, child_node_id, parent_type
+         FROM parent_child_relations
+         WHERE parent_node_id = ANY($1::int[])`,
+        [finalRelatedIds]
+      );
+
+      const marriagesForNodesRes = await client.query(
+        `SELECT husband_node_id, wife_node_id
+         FROM marriages
+         WHERE (husband_node_id = ANY($1::int[]) OR wife_node_id = ANY($1::int[]))
+           AND status = 'married'`,
+        [finalRelatedIds]
+      );
+
       const parentMap = new Map<number, { father?: number; mother?: number }>();
+      const childrenMap = new Map<string, string[]>();
+      const spouseMap = new Map<string, string[]>();
 
       pcrRes.rows.forEach((row: any) => {
         const childId = row.child_node_id;
@@ -144,15 +162,34 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // Ambil father_id dari parentMap
-      const nodesWithParents = nodesRes.rows.map((node: any) => ({
-        ...node,
-        father_id: parentMap.get(node.id)?.father || null,
-        mother_id: parentMap.get(node.id)?.mother || null,
-      }));
+      childrenAndSpousesRes.rows.forEach((row: any) => {
+        const p = row.parent_node_id.toString();
+        if (!childrenMap.has(p)) childrenMap.set(p, []);
+        childrenMap.get(p)!.push(row.child_node_id.toString());
+      });
+
+      marriagesForNodesRes.rows.forEach((m: any) => {
+        const h = m.husband_node_id.toString();
+        const w = m.wife_node_id.toString();
+        if (!spouseMap.has(h)) spouseMap.set(h, []);
+        if (!spouseMap.has(w)) spouseMap.set(w, []);
+        if (!spouseMap.get(h)!.includes(w)) spouseMap.get(h)!.push(w);
+        if (!spouseMap.get(w)!.includes(h)) spouseMap.get(w)!.push(h);
+      });
+
+      const nodesWithRelations = nodesRes.rows.map((node: any) => {
+        const nodeId = node.id.toString();
+        return {
+          ...node,
+          father_id: parentMap.get(node.id)?.father || null,
+          mother_id: parentMap.get(node.id)?.mother || null,
+          spouse_ids: spouseMap.get(nodeId) || [],
+          children_ids: childrenMap.get(nodeId) || [],
+        };
+      });
 
       // Ambil nama depan ayah untuk semua node yang punya father
-      const fatherIds = nodesWithParents
+      const fatherIds = nodesWithRelations
         .map(n => n.father_id)
         .filter((id): id is number => id !== null);
 
@@ -171,7 +208,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Hitung nasab_line langsung di server (hanya nama depan ayah)
-      const finalNodes = nodesWithParents.map((node: any) => {
+      const finalNodes = nodesWithRelations.map((node: any) => {
         let nasab_line = null;
         if (node.father_id) {
           const fatherFirstName = fatherNameMap.get(node.father_id);
