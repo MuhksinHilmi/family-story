@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from 'react';
+import { IconHeart, IconUsers, IconHeartHandshake } from '@tabler/icons-react';
 import SwipeCard from './SwipeCard';
 import ConfirmSheet from './ConfirmSheet';
 import { useTaaruf } from '../hooks/useTaaruf';
@@ -9,8 +10,40 @@ interface SwipeDeckProps {
   mode: 'browse' | 'review';
   profiles?: any[];
   applications?: any[];
-  onSendApplication?: (profileId: number, message: string) => void;
-  onRespondApplication?: (applicationId: number, action: 'accept' | 'reject', message: string) => void;
+}
+
+function EmptyState({ mode }: { mode: 'browse' | 'review' }) {
+  const messages = {
+    browse: {
+      icon: IconUsers,
+      title: 'Belum Ada Profil Wanita',
+      description: 'Saat ini belum ada profil wanita yang tersedia untuk ditampilkan. Profil yang ditampilkan sudah melalui proses verifikasi agar sesuai dengan standar Ta\'aruf.',
+      hint: 'Coba kembali nanti atau hubungi admin jika ada pertanyaan.'
+    },
+    review: {
+      icon: IconHeartHandshake,
+      title: 'Belum Ada Lamaran Masuk',
+      description: 'Anda belum menerima lamaran Ta\'aruf dari pria mana pun. Ketika ada yang melamar, profil mereka akan muncul di sini.',
+      hint: 'Yuk, teruskan berwawasan dan berpegian untuk menunggu yang tepat.'
+    }
+  };
+
+  const { icon: Icon, title, description, hint } = messages[mode];
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-[#F5F0E8] px-4">
+      <div className="text-center max-w-md">
+        <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-[#D6EAD9] flex items-center justify-center">
+          <Icon className="w-10 h-10 text-[#4A7C59]" />
+        </div>
+        <h2 className="text-xl font-bold text-[#3B2F1E] mb-3">{title}</h2>
+        <p className="text-[#6B5B45] mb-4 leading-relaxed">{description}</p>
+        <div className="bg-[#FDFAF5] border border-[#D4C4A8] rounded-xl p-4">
+          <p className="text-[11px] text-[#9C8B75] italic">{hint}</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function SwipeDeck({ mode, profiles = [], applications = [] }: SwipeDeckProps) {
@@ -40,7 +73,7 @@ export default function SwipeDeck({ mode, profiles = [], applications = [] }: Sw
     
     setShowConfirm(false);
     refreshStatus();
-    setCurrentIndex(0); // Reset to start of new list after action
+    setCurrentIndex(0);
   };
 
   const handleSkip = () => {
@@ -53,11 +86,7 @@ export default function SwipeDeck({ mode, profiles = [], applications = [] }: Sw
   const currentItem = targetList[currentIndex];
 
   if (!currentItem) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#F5F0E8]">
-        <p className="text-[#6B5B45]">Tidak ada profil lainnya</p>
-      </div>
-    );
+    return <EmptyState mode={mode} />;
   }
 
   return (

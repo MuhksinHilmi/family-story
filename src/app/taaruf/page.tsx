@@ -9,6 +9,7 @@ import WaitingScreen from './components/WaitingScreen';
 import EmptyInbox from './components/EmptyInbox';
 import MatchedChatRoom from './components/MatchedChatRoom';
 import { Heart } from 'lucide-react';
+import { ToastContainer } from '@/components/ui/toast';
 
 export default function TaarufPage() {
   const router = useRouter();
@@ -68,43 +69,95 @@ export default function TaarufPage() {
     );
   }
 
-  if (!status?.my_profile) {
-    return <TaarufProfileForm />;
+  function isProfileComplete(profile: any): boolean {
+    return profile &&
+      profile.location && profile.location.trim() !== '' &&
+      profile.education_level && profile.education_level.trim() !== '' &&
+      profile.occupation && profile.occupation.trim() !== '' &&
+      profile.interests && profile.interests.length > 0;
+  }
+
+  if (!status?.my_profile || !isProfileComplete(status.my_profile)) {
+    return (
+      <>
+        <TaarufProfileForm />
+        <ToastContainer />
+      </>
+    );
+  }
+
+  if (!status?.gender) {
+    return (
+      <>
+        <TaarufProfileForm />
+        <ToastContainer />
+      </>
+    );
   }
 
   if (status.gender === 'male') {
     if (status.matched_room) {
-      return <MatchedChatRoom room={status.matched_room} />;
+      return (
+        <>
+          <MatchedChatRoom room={status.matched_room} />
+          <ToastContainer />
+        </>
+      );
     }
 
     if (status.outgoing_application?.status === 'pending') {
-      return <WaitingScreen application={status.outgoing_application} />;
+      return (
+        <>
+          <WaitingScreen application={status.outgoing_application} />
+          <ToastContainer />
+        </>
+      );
     }
 
     return (
-      <SwipeDeck
-        mode="browse"
-        profiles={status.available_profiles || []}
-      />
+      <>
+        <SwipeDeck
+          mode="browse"
+          profiles={status.available_profiles || []}
+        />
+        <ToastContainer />
+      </>
     );
   }
 
-  if (status.gender === 'female') {
+  if (!status.gender || status.gender === 'female') {
     if (status.matched_room) {
-      return <MatchedChatRoom room={status.matched_room} />;
+      return (
+        <>
+          <MatchedChatRoom room={status.matched_room} />
+          <ToastContainer />
+        </>
+      );
     }
 
     if (status.incoming_applications && status.incoming_applications.length > 0) {
       return (
-        <SwipeDeck
-          mode="review"
-          applications={status.incoming_applications}
-        />
+        <>
+          <SwipeDeck
+            mode="review"
+            applications={status.incoming_applications}
+          />
+          <ToastContainer />
+        </>
       );
     }
 
-    return <EmptyInbox />;
+    return (
+      <>
+        <EmptyInbox />
+        <ToastContainer />
+      </>
+    );
   }
 
-  return null;
+  return (
+    <>
+      <ToastContainer />
+    </>
+  );
 }

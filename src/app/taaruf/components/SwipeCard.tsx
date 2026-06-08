@@ -1,7 +1,6 @@
 "use client";
 
-import { motion } from 'framer-motion';
-import { X, Heart, Send } from 'lucide-react';
+import { X, Heart } from "lucide-react";
 
 interface SwipeCardProps {
   profile: {
@@ -17,87 +16,119 @@ interface SwipeCardProps {
   application?: {
     message: string;
   };
-  mode: 'browse' | 'review';
+  mode: "browse" | "review";
   onAccept: () => void;
   onReject: () => void;
 }
 
-export default function SwipeCard({ profile, application, mode, onAccept, onReject }: SwipeCardProps) {
-  const getInitials = (name: string) => {
-    return name?.charAt(0) || '?';
-  };
-
+export default function SwipeCard({
+  profile,
+  application,
+  mode,
+  onAccept,
+  onReject,
+}: SwipeCardProps) {
   return (
-    <div className="relative w-full max-w-md mx-auto h-[500px] bg-[#FDFAF5] rounded-xl overflow-hidden border border-[#D4C4A8]">
-      {/* Background */}
-      {profile.cover_photo ? (
-        <img
-          src={profile.cover_photo}
-          alt="cover"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      ) : (
-        <div className="absolute inset-0 bg-gradient-to-b from-[#4A7C59] to-[#2E5239]" />
-      )}
-
-      {/* Dark overlay for readability */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-
-      {/* Content overlay */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-        <h2 className="text-2xl font-bold">{profile.full_name}</h2>
-        <p className="text-white/80">
-          {profile.age ? `${profile.age} tahun` : ''} 
-          {profile.age && profile.location && ' • '}
-          {profile.location}
-        </p>
-        {profile.occupation && (
-          <p className="text-white/70 text-sm mt-1">{profile.occupation}</p>
-        )}
-        
-        {/* Interest chips */}
-        {profile.interests && profile.interests.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3">
-            {profile.interests.slice(0, 4).map(interest => (
-              <span key={interest} className="px-2 py-1 bg-white/20 rounded-full text-xs">
-                {interest}
-              </span>
-            ))}
-          </div>
+    // Wrapper: card + buttons stacked vertically
+    <div className="flex flex-col items-center gap-6 w-full max-w-md mx-auto">
+      {/* === CARD === */}
+      <div className="relative w-full h-[500px] rounded-2xl overflow-hidden border border-[#D4C4A8] shadow-lg">
+        {/* Background - use cover_photo first, then photo_url as fallback */}
+        {profile.cover_photo ? (
+          <img
+            src={profile.cover_photo}
+            alt="cover"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : profile.photo_url ? (
+          <img
+            src={profile.photo_url}
+            alt={profile.full_name}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-b from-[#4A7C59] to-[#2E5239]" />
         )}
 
-        {/* Application message in review mode */}
-        {mode === 'review' && application?.message && (
-          <div className="mt-4 p-3 bg-white/10 rounded-lg backdrop-blur">
-            <p className="text-xs font-semibold mb-1">Pesan Lamaran:</p>
-            <p className="text-sm">{application.message}</p>
-          </div>
-        )}
+        {/* Dark gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+
+        {/* Content: pinned to bottom of card */}
+        <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+          <h2 className="text-2xl font-bold leading-tight">
+            {profile.full_name}
+          </h2>
+
+          <p className="text-white/80 text-sm mt-1">
+            {profile.age ? `${profile.age} tahun` : ""}
+            {profile.age && profile.location ? " · " : ""}
+            {profile.location}
+          </p>
+
+          {profile.occupation && (
+            <p className="text-white/65 text-sm mt-0.5">{profile.occupation}</p>
+          )}
+
+          {/* About me */}
+          {profile.about_me && (
+            <p className="text-white/90 text-sm mt-2 line-clamp-3">{profile.about_me}</p>
+          )}
+
+          {/* Interest chips */}
+          {profile.interests && profile.interests.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {profile.interests.slice(0, 4).map((interest) => (
+                <span
+                  key={interest}
+                  className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium"
+                >
+                  {interest}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Application message — review mode only */}
+          {mode === "review" && application?.message && (
+            <div className="mt-4 p-3 bg-white/10 backdrop-blur-sm rounded-xl border border-white/15">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/60 mb-1">
+                Pesan Lamaran
+              </p>
+              <p className="text-sm leading-relaxed">{application.message}</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="absolute bottom-4 left-0 right-0 flex justify-center items-center gap-8">
-        <button
-          onClick={onReject}
-          className="w-14 h-14 rounded-full border-2 border-red-400 bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all"
-          aria-label={mode === 'browse' ? 'Lewati' : 'Tolak'}
-        >
-          <X className="w-6 h-6 text-red-400" />
-        </button>
+      {/* === ACTION BUTTONS — outside the card === */}
+      <div className="flex items-center justify-center gap-10">
+        {/* Reject / Skip */}
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={onReject}
+            className="w-14 h-14 rounded-full border-2 border-red-400 bg-white flex items-center justify-center shadow-md hover:bg-red-50 hover:scale-105 active:scale-95 transition-all duration-150"
+            aria-label={mode === "browse" ? "Lewati" : "Tolak"}
+          >
+            <X className="w-6 h-6 text-red-400" />
+          </button>
+          <span className="text-xs text-[#9C8B75] font-medium">
+            {mode === "browse" ? "Lewati" : "Tolak"}
+          </span>
+        </div>
 
-        <button
-          onClick={onAccept}
-          className="w-14 h-14 rounded-full border-2 border-green-400 bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all"
-          aria-label={mode === 'browse' ? 'Lamar' : 'Terima'}
-        >
-          <Heart className="w-6 h-6 text-green-400" />
-        </button>
-      </div>
-
-      {/* Action labels */}
-      <div className="absolute bottom-20 left-0 right-0 flex justify-center gap-12 text-xs text-[#9C8B75]">
-        <span>{mode === 'browse' ? 'Lewati' : 'Tolak'}</span>
-        <span>{mode === 'browse' ? 'Lamar' : 'Terima'}</span>
+        {/* Accept / Apply */}
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={onAccept}
+            className="w-14 h-14 rounded-full border-2 border-[#4A7C59] bg-white flex items-center justify-center shadow-md hover:bg-[#D6EAD9] hover:scale-105 active:scale-95 transition-all duration-150"
+            aria-label={mode === "browse" ? "Lamar" : "Terima"}
+          >
+            <Heart className="w-6 h-6 text-[#4A7C59]" />
+          </button>
+          <span className="text-xs text-[#9C8B75] font-medium">
+            {mode === "browse" ? "Lamar" : "Terima"}
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { apiFetch } from '@/lib/api-client';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import ProfessionalProfile from './components/ProfessionalProfile';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -374,6 +375,8 @@ export default function SettingsPage() {
             </Button>
           </CardContent>
         </Card>
+
+        <ProfessionalProfile />
 
         {/* UUID Publik untuk Undangan Relasi */}
         <Card className="bg-[#FDFAF5] border border-[#D4C4A8]">

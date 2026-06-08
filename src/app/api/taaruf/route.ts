@@ -135,6 +135,10 @@ export async function GET(request: NextRequest) {
          WHERE tp.status = 'active'
          AND n.gender = 'female'
          AND n.user_id != $1
+         AND tp.location IS NOT NULL AND tp.location != ''
+         AND tp.education_level IS NOT NULL AND tp.education_level != ''
+         AND tp.occupation IS NOT NULL AND tp.occupation != ''
+         AND tp.interests IS NOT NULL AND array_length(tp.interests, 1) > 0
          AND tp.id NOT IN (
            SELECT recipient_profile_id FROM taaruf_applications 
            WHERE sender_profile_id = $2
@@ -203,6 +207,10 @@ export async function POST(request: NextRequest) {
     letter,
   } = body;
 
+  // Convert age to integers, default to null if empty
+  const ageMin = criteria?.age_min ? parseInt(criteria.age_min, 10) : null;
+  const ageMax = criteria?.age_max ? parseInt(criteria.age_max, 10) : null;
+
   const client = await pool.connect();
 
   try {
@@ -269,11 +277,21 @@ export async function POST(request: NextRequest) {
       profileId = insertRes.rows[0].id;
     }
 
-    if (criteria) {
+if (criteria) {
       const existingCriteriaRes = await client.query(
         "SELECT id FROM taaruf_criteria WHERE profile_id = $1 LIMIT 1",
         [profileId],
       );
+
+      const maritalStatusMap: Record<string, string> = {
+        'Belum Menikah': 'never_married',
+        'Cerai': 'divorced',
+        'Janda': 'widowed'
+      };
+
+      const maritalStatus = criteria.preferred_marital_status && criteria.preferred_marital_status !== '' 
+        ? maritalStatusMap[criteria.preferred_marital_status] || null
+        : null;
 
       if (existingCriteriaRes.rows.length > 0) {
         await client.query(
@@ -282,11 +300,11 @@ export async function POST(request: NextRequest) {
                preferred_location = $4, preferred_marital_status = $5, updated_at = NOW()
            WHERE profile_id = $6`,
           [
-            criteria.age_min,
-            criteria.age_max,
+            ageMin,
+            ageMax,
             criteria.preferred_education,
             criteria.preferred_location,
-            criteria.preferred_marital_status,
+            maritalStatus,
             profileId,
           ],
         );
@@ -298,11 +316,11 @@ export async function POST(request: NextRequest) {
            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
           [
             profileId,
-            criteria.age_min,
-            criteria.age_max,
+            ageMin,
+            ageMax,
             criteria.preferred_education,
             criteria.preferred_location,
-            criteria.preferred_marital_status,
+            maritalStatus,
           ],
         );
       }

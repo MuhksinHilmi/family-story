@@ -36,12 +36,13 @@ export async function isUserMemberOfChatRoom(
   const room = await getChatRoomById(roomId);
   if (!room) return false;
   
-  // Check room_memberships table first (for taaruf rooms)
-  const directMembership = await pool.query(
-    `SELECT 1 FROM room_memberships WHERE chat_room_id = $1 AND user_id = $2`,
-    [roomId, userId]
-  );
-  if (directMembership.rows.length > 0) return true;
+  // Check room_memberships table first (for taaruf rooms) - TEMPORARILY DISABLED
+  // Table not yet created in local DB; will be re-enabled when taaruf is ready
+  // const directMembership = await pool.query(
+  //   `SELECT 1 FROM room_memberships WHERE chat_room_id = $1 AND user_id = $2`,
+  //   [roomId, userId]
+  // );
+  // if (directMembership.rows.length > 0) return true;
   
   // For small rooms: check membership in the specific nuclear family
   if (room.small_family_uuid) {

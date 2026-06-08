@@ -14,6 +14,7 @@ import {
   Shield,
   Menu,
   X,
+  Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth-context";
@@ -58,12 +59,13 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   const taarufItem = !hasSpouse ? { href: "/taaruf", icon: Heart, label: "Ta'aruf" } : null;
   const navItems = [
-    { href: "/feeds", icon: Home, label: "Feeds" },
-    { href: "/tree", icon: Network, label: "Pohon Keluarga" },
+    { href: "/feeds", icon: Home, label: "Family Feed" },
+    { href: "/tree", icon: Network, label: "Family Tree" },
     ...(taarufItem ? [taarufItem] : []),
-    { href: "/documents", icon: FileText, label: "Dokumen" },
-    { href: "/chat", icon: MessageCircle, label: "Chat" },
-    { href: "/settings", icon: Settings, label: "Pengaturan" },
+    { href: "/halaqah", icon: Users, label: "Circle Family" },
+    { href: "/documents", icon: FileText, label: "Family Vault" },
+    { href: "/chat", icon: MessageCircle, label: "Messages" },
+    { href: "/settings", icon: Settings, label: "Settings" },
   ];
 
   const isChat = pathname?.startsWith("/chat");
@@ -127,16 +129,16 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
               variant="ghost"
               size="sm"
               onClick={logout}
-              className="text-[#6B5B45] hover:bg-[#EDE4D3]"
+              className="text-[#6B5B45] hover:bg-[#EDE4D3] transition-colors"
             >
               <LogOut className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Keluar</span>
+              <span className="hidden sm:inline">Logout</span>
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden text-[#6B5B45] hover:bg-[#EDE4D3]"
+              className="md:hidden text-[#6B5B45] hover:bg-[#EDE4D3] transition-colors"
             >
               {mobileMenuOpen ? (
                 <X className="h-4 w-4" />

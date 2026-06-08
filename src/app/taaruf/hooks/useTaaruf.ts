@@ -96,12 +96,15 @@ export function useTaaruf() {
       
       if (res.ok) {
         await fetchStatus();
+        return true;
       } else {
         const err = await res.json().catch(() => ({}));
         setError(err.error || 'Gagal menyimpan profil');
+        return false;
       }
     } catch (err) {
       setError('Terjadi kesalahan jaringan');
+      return false;
     } finally {
       setIsLoading(false);
     }
