@@ -10,8 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Users, BookOpen, MessageSquare, LayoutDashboard, Settings, Calendar, Trophy } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
-import LearningPathMap from './components/LearningPathMap';
-import ChallengeTab from './components/ChallengeTab';
+import LearningPathMap from '../components/LearningPathMap';
+import ChallengeTab from '../components/ChallengeTab';
 
 export default function HalaqahDetailPage() {
   const { id } = useParams();
@@ -23,7 +23,7 @@ export default function HalaqahDetailPage() {
   useEffect(() => {
     const fetchDetail = async () => {
       setIsLoading(true);
-      const res = await apiFetch(`/api/halaqah/${id}`);
+      const res = await apiFetch(`/api/circle-family/${id}`);
       if (res.ok) {
         const result = await res.json();
         setData(result);
@@ -72,10 +72,10 @@ export default function HalaqahDetailPage() {
             </div>
           </div>
 
-          <Button variant="outline" className="border-[#D4C4A8] text-[#6B5B45] hover:bg-[#EDE4D3]">
-            <Settings className="w-4 h-4 mr-2" /> Pengaturan
-          </Button>
-        </Cdiv>
+<Button variant="outline" className="border-[#D4C4A8] text-[#6B5B45] hover:bg-[#EDE4D3]">
+             <Settings className="w-4 h-4 mr-2" /> Pengaturan
+           </Button>
+         </div>
 
         {/* Tab Navigation */}
         <div className="max-w-5xl mx-auto px-4 flex gap-6 overflow-x-auto scrollbar-hide">
@@ -173,7 +173,7 @@ export default function HalaqahDetailPage() {
               ) : (
                 <div className="text-center py-20 bg-[#FDFAF5] rounded-3xl border-[#D4C4A8] border-2 space-y-4">
                   <BookOpen className="w-12 h-12 text-[#9C8B75] mx-auto" />
-                  <p className="text-[#6B5B45]">Belum ada kurikulum belajar untuk halaqah ini.</p>
+                  <p className="text-[#6B5B45]">Belum ada kurikulum belajar untuk circle family ini.</p>
                   <Button variant="outline" className="border-[#D4C4A8] text-[#6B5B45]">Saran Kurikulum</Button>
                 </div >
               )}

@@ -121,5 +121,7 @@ export async function POST(request: NextRequest) {
       console.error('Accept Invite error:', error);
       return NextResponse.json({ error: error.message || 'Terjadi kesalahan' }, { status: 500 });
     }
+  } catch (error) {
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

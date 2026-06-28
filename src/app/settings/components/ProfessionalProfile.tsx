@@ -1,15 +1,14 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { apiFetch } from '@/lib/api-client';
-import { motion, AnimatePresence } from 'framer-motion';
-import { TablerIcons } from '@tabler/icons-react'; // Assuming this or lucide-react
-import { Plus, Trash2, Briefcase, Tool } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { apiFetch } from "@/lib/api-client";
+import { motion, AnimatePresence } from "framer-motion";
+import { Plus, Trash2, Briefcase, Wrench } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface Experience {
   id?: number;
@@ -30,18 +29,18 @@ interface ProfessionalProfile {
 
 export default function ProfessionalProfile() {
   const [prof, setProf] = useState<ProfessionalProfile>({
-    occupation: '',
+    occupation: "",
     skills: [],
     occupation_is_public: true,
     experiences: [],
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
     const fetchProf = async () => {
-      const res = await apiFetch('/api/user/professional');
+      const res = await apiFetch("/api/user/professional");
       if (res.ok) {
         const data = await res.json();
         setProf(data.professional);
@@ -55,12 +54,12 @@ export default function ProfessionalProfile() {
       if (!prof.skills.includes(inputValue.trim())) {
         setProf({ ...prof, skills: [...prof.skills, inputValue.trim()] });
       }
-      setInputValue('');
+      setInputValue("");
     }
   };
 
   const removeSkill = (skill: string) => {
-    setProf({ ...prof, skills: prof.skills.filter(s => s !== skill) });
+    setProf({ ...prof, skills: prof.skills.filter((s) => s !== skill) });
   };
 
   const addExperience = () => {
@@ -68,8 +67,15 @@ export default function ProfessionalProfile() {
       ...prof,
       experiences: [
         ...prof.experiences,
-        { company_name: '', role: '', start_date: '', end_date: '', description: '', is_public: true }
-      ]
+        {
+          company_name: "",
+          role: "",
+          start_date: "",
+          end_date: "",
+          description: "",
+          is_public: true,
+        },
+      ],
     });
   };
 
@@ -79,7 +85,11 @@ export default function ProfessionalProfile() {
     setProf({ ...prof, experiences: updated });
   };
 
-  const updateExperience = (index: number, field: keyof Experience, value: any) => {
+  const updateExperience = (
+    index: number,
+    field: keyof Experience,
+    value: any,
+  ) => {
     const updated = [...prof.experiences];
     updated[index] = { ...updated[index], [field]: value };
     setProf({ ...prof, experiences: updated });
@@ -88,17 +98,17 @@ export default function ProfessionalProfile() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const res = await apiFetch('/api/user/professional', {
-        method: 'PUT',
+      const res = await apiFetch("/api/user/professional", {
+        method: "PUT",
         body: JSON.stringify(prof),
       });
       if (res.ok) {
-        alert('Profil profesional berhasil diperbarui');
+        alert("Profil profesional berhasil diperbarui");
       } else {
-        alert('Gagal menyimpan profil');
+        alert("Gagal menyimpan profil");
       }
     } catch (error) {
-      alert('Terjadi kesalahan');
+      alert("Terjadi kesalahan");
     } finally {
       setIsSaving(false);
     }
@@ -117,17 +127,21 @@ export default function ProfessionalProfile() {
             <Briefcase className="text-[#4A7C59] w-5 h-5" />
             <CardTitle className="text-[#3B2F1E]">Profil Profesional</CardTitle>
           </div>
-          <p className="text-xs text-[#9C8B75]">Informasi ini digunakan untuk pencarian Halaqah dan networking antar keluarga.</p>
+          <p className="text-xs text-[#9C8B75]">
+            Informasi ini digunakan untuk pencarian Circle Family dan networking
+            antar keluarga.
+          </p>
         </CardHeader>
         <CardContent className="space-y-6">
-
           {/* Occupation & Privacy */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-[#6B5B45]">Pekerjaan Saat Ini</Label>
               <Input
                 value={prof.occupation}
-                onChange={(e) => setProf({...prof, occupation: e.target.value})}
+                onChange={(e) =>
+                  setProf({ ...prof, occupation: e.target.value })
+                }
                 placeholder="contoh: Software Engineer, Dokter, Guru"
                 className="bg-[#EDE4D3] border-[#D4C4A8] text-[#3B2F1E]"
               />
@@ -138,9 +152,14 @@ export default function ProfessionalProfile() {
                 id="pub-prof"
                 className="w-4 h-4 rounded-sm accent-[#4A7C59]"
                 checked={prof.occupation_is_public}
-                onChange={(e) => setProf({...prof, occupation_is_public: e.target.checked})}
+                onChange={(e) =>
+                  setProf({ ...prof, occupation_is_public: e.target.checked })
+                }
               />
-              <Label htmlFor="pub-prof" className="text-[#6B5B45] cursor-pointer">
+              <Label
+                htmlFor="pub-prof"
+                className="text-[#6B5B45] cursor-pointer"
+              >
                 Tampilkan profil secara publik (untuk Discovery)
               </Label>
             </div>
@@ -149,13 +168,15 @@ export default function ProfessionalProfile() {
           {/* Skills Section */}
           <div className="space-y-3">
             <Label className="text-[#6B5B45] flex items-center gap-2">
-              <Tool className="w-4 h-4" /> Keahlian / Skill
+              <Wrench className="w-4 h-4" /> Keahlian / Skill
             </Label>
             <div className="flex gap-2">
               <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && (e.preventDefault(), addSkill())
+                }
                 placeholder="Tambah skill (e.g. Memasak, Coding...)"
                 className="bg-[#EDE4D3] border-[#D4C4A8] text-[#3B2F1E]"
               />
@@ -176,9 +197,7 @@ export default function ProfessionalProfile() {
                     exit={{ scale: 0, opacity: 0 }}
                     whileHover={{ scale: 1.05 }}
                   >
-                    <Badge
-                      className="bg-[#D6EAD9] text-[#2E5239] border-[#4A7C59]/30 px-3 py-1 rounded-full flex items-center gap-1 cursor-default"
-                    >
+                    <Badge className="bg-[#D6EAD9] text-[#2E5239] border-[#4A7C59]/30 px-3 py-1 rounded-full flex items-center gap-1 cursor-default">
                       {skill}
                       <button
                         onClick={() => removeSkill(skill)}
@@ -226,18 +245,30 @@ export default function ProfessionalProfile() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">Perusahaan</Label>
+                      <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">
+                        Perusahaan
+                      </Label>
                       <Input
                         value={exp.company_name}
-                        onChange={(e) => updateExperience(index, 'company_name', e.target.value)}
+                        onChange={(e) =>
+                          updateExperience(
+                            index,
+                            "company_name",
+                            e.target.value,
+                          )
+                        }
                         className="bg-white border-[#D4C4A8] h-8 text-sm"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">Posisi / Role</Label>
+                      <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">
+                        Posisi / Role
+                      </Label>
                       <Input
                         value={exp.role}
-                        onChange={(e) => updateExperience(index, 'role', e.target.value)}
+                        onChange={(e) =>
+                          updateExperience(index, "role", e.target.value)
+                        }
                         className="bg-white border-[#D4C4A8] h-8 text-sm"
                       />
                     </div>
@@ -245,30 +276,42 @@ export default function ProfessionalProfile() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">Mulai</Label>
+                      <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">
+                        Mulai
+                      </Label>
                       <Input
                         type="date"
                         value={exp.start_date}
-                        onChange={(e) => updateExperience(index, 'start_date', e.target.value)}
+                        onChange={(e) =>
+                          updateExperience(index, "start_date", e.target.value)
+                        }
                         className="bg-white border-[#D4C4A8] h-8 text-sm"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">Selesai</Label>
+                      <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">
+                        Selesai
+                      </Label>
                       <Input
                         type="date"
                         value={exp.end_date}
-                        onChange={(e) => updateExperience(index, 'end_date', e.target.value)}
+                        onChange={(e) =>
+                          updateExperience(index, "end_date", e.target.value)
+                        }
                         className="bg-white border-[#D4C4A8] h-8 text-sm"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">Deskripsi Singkat</Label>
+                    <Label className="text-[10px] uppercase tracking-wider text-[#9C8B75]">
+                      Deskripsi Singkat
+                    </Label>
                     <Input
                       value={exp.description}
-                      onChange={(e) => updateExperience(index, 'description', e.target.value)}
+                      onChange={(e) =>
+                        updateExperience(index, "description", e.target.value)
+                      }
                       className="bg-white border-[#D4C4A8] h-8 text-sm"
                     />
                   </div>
@@ -277,7 +320,7 @@ export default function ProfessionalProfile() {
 
               {prof.experiences.length === 0 && (
                 <div className="text-center py-6 border-2 border-dashed border-[#D4C4A8] rounded-xl text-[#9C8B75] text-sm">
- la la la... Belum ada riwayat pekerjaan.
+                  la la la... Belum ada riwayat pekerjaan.
                 </div>
               )}
             </div>
@@ -289,7 +332,7 @@ export default function ProfessionalProfile() {
               disabled={isSaving}
               className="bg-[#4A7C59] hover:bg-[#2E5239] text-white px-8"
             >
-              {isSaving ? 'Menyimpan...' : 'Simpan Profil Profesional'}
+              {isSaving ? "Menyimpan..." : "Simpan Profil Profesional"}
             </Button>
           </div>
         </CardContent>

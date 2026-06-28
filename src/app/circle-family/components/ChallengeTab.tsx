@@ -45,7 +45,7 @@ export default function ChallengeTab({ halaqahId }: { halaqahId: string }) {
   const fetchChallenges = async () => {
     setIsLoading(true);
     try {
-      const res = await apiFetch(`/api/halaqah/${halaqahId}/challenges`);
+      const res = await apiFetch(`/api/circle-family/${halaqahId}/challenges`);
       if (res.ok) {
         const result = await res.json();
         setData(result);
@@ -88,7 +88,7 @@ export default function ChallengeTab({ halaqahId }: { halaqahId: string }) {
     return (
       <div className="text-center py-20 bg-[#FDFAF5] rounded-3xl border-[#D4C4A8] border-2 space-y-4">
         <Trophy className="w-12 h-12 text-[#9C8B75] mx-auto opacity-50" />
-        <p className="text-[#6B5B45]">Belum ada tantangan aktif untuk halaqah ini.</p>
+        <p className="text-[#6B5B45]">Belum ada tantangan aktif untuk circle family ini.</p>
       </div >
     );
   }

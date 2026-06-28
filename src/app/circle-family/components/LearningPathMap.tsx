@@ -33,7 +33,7 @@ export default function LearningPathMap({ steps, progress, myNuclearFamilyId, ha
   const toggleProgress = async (stepId: number, currentStatus: boolean) => {
     setUpdatingStep(stepId);
     try {
-      const res = await apiFetch(`/api/halaqah/${halaqahId}/progress`, {
+      const res = await apiFetch(`/api/circle-family/${halaqahId}/progress`, {
         method: 'POST',
         body: JSON.stringify({
           step_id: stepId,

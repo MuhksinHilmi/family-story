@@ -36,7 +36,7 @@ export default function SkillDiscoveryPage() {
   const fetchMatches = async () => {
     setIsLoading(true);
     try {
-      const res = await apiFetch(`/api/halaqah/discover/skill?skills=${skills.join(',')}`);
+      const res = await apiFetch(`/api/circle-family/discover/skill?skills=${skills.join(',')}`);
       if (res.ok) {
         const data = await res.json();
         setMatches(data.matches);
@@ -62,7 +62,7 @@ export default function SkillDiscoveryPage() {
   const sendInvite = async (familyId: number) => {
     setIsSending(familyId);
     try {
-      const res = await apiFetch('/api/halaqah/invite', {
+      const res = await apiFetch('/api/circle-family/invite', {
         method: 'POST',
         body: JSON.stringify({
           target_nuclear_family_id: familyId,
@@ -92,7 +92,7 @@ export default function SkillDiscoveryPage() {
       >
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold text-[#3B2F1E]">Temukan Keluarga Belajar</h1>
-          <p className="text-[#6B5B45]">Cari keluarga dengan keahlian tertentu untuk memulai Halaqah bersama.</p>
+          <p className="text-[#6B5B45]">Cari keluarga dengan keahlian tertentu untuk memulai circle family bersama.</p>
         </div>
 
         {/* Skill Filter Bar */}

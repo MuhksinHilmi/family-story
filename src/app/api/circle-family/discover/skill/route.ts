@@ -92,8 +92,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       matches: result.rows.map(row => ({
         ...row,
-        matched_skills: row.combined_skills.filter(s =>
-          skills.some(target => s.toLowerCase().includes(target.toLowerCase()))
+        matched_skills: row.combined_skills.filter((s: string) =>
+          skills.some((target: string) => s.toLowerCase().includes(target.toLowerCase()))
         )
       })),
       has_more: result.rowCount === 20

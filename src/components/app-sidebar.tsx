@@ -15,6 +15,11 @@ import {
   Menu,
   X,
   Users,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  UserPlus,
+  CheckSquare,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth-context";
@@ -29,14 +34,18 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
+  const [circleFamilyExpanded, setCircleFamilyExpanded] = useState(pathname?.startsWith("/circle-family"));
+  const [hasHalaqahInvitation, setHasHalaqahInvitation] = useState(false);
+  const [hasJoinRequests, setHasJoinRequests] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (
       !token &&
       !pathname?.startsWith("/auth") &&
-      !pathname?.startsWith("/invitations") &&
-      pathname !== "/"
+      pathname !== "/" &&
+      pathname !== "/invitations" &&
+      !pathname?.startsWith("/invitations/")
     ) {
       router.push("/auth/login");
     }
@@ -50,8 +59,8 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
 
   const isAuthPage =
     pathname?.startsWith("/auth") ||
-    pathname?.startsWith("/invitations") ||
-    pathname === "/";
+    pathname === "/" ||
+    pathname === "/invitations";
 
   if (isAuthPage) {
     return children;
@@ -62,7 +71,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     { href: "/feeds", icon: Home, label: "Family Feed" },
     { href: "/tree", icon: Network, label: "Family Tree" },
     ...(taarufItem ? [taarufItem] : []),
-    { href: "/halaqah", icon: Users, label: "Circle Family" },
+    { href: "/circle-family", icon: Users, label: "Circle Family", hasSubmenu: true },
     { href: "/documents", icon: FileText, label: "Family Vault" },
     { href: "/chat", icon: MessageCircle, label: "Messages" },
     { href: "/settings", icon: Settings, label: "Settings" },
@@ -107,6 +116,149 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
       window.removeEventListener("invitations-updated", handler);
     };
   }, []);
+
+  useEffect(() => {
+    const fetchHalaqahInvitations = async () => {
+      try {
+        const res = await apiFetch("/api/circle-family/invitations?status=pending");
+        if (!res.ok) return;
+
+        const data = await res.json();
+        setHasHalaqahInvitation((data.invitations || []).length > 0);
+      } catch {
+      }
+    };
+
+    fetchHalaqahInvitations();
+
+    const handler = () => fetchHalaqahInvitations();
+    window.addEventListener("halaqah-invitations-updated", handler);
+
+    return () => {
+      window.removeEventListener("halaqah-invitations-updated", handler);
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchJoinRequests = async () => {
+      try {
+        const res = await apiFetch("/api/circle-family/requests?status=pending");
+        if (!res.ok) return;
+
+        const data = await res.json();
+        setHasJoinRequests((data.requests || []).length > 0);
+      } catch {
+      }
+    };
+
+    fetchJoinRequests();
+
+    const handler = () => fetchJoinRequests();
+    window.addEventListener("halaqah-requests-updated", handler);
+
+    return () => {
+      window.removeEventListener("halaqah-requests-updated", handler);
+    };
+  }, []);
+
+  const isCircleFamilyPage = pathname?.startsWith("/circle-family");
+  const isDiscoverSkillPage = pathname?.startsWith("/circle-family/discover/skill");
+  const isCircleFamilyInvitationPage = pathname?.startsWith("/invitations/circle-family");
+
+  const circleFamilySubItems = [
+    { href: "/circle-family/discover/skill", icon: Search, label: "Cari Keluarga" },
+    { href: "/circle-family", icon: Users, label: "Grup Saya" },
+    { href: "/circle-family/requests", icon: CheckSquare, label: "Permintaan Bergabung" },
+    { href: "/invitations/circle-family", icon: UserPlus, label: "Undangan Masuk" },
+  ];
+
+  const renderNavItems = () => (
+    <div className="space-y-1">
+      {navItems.map((item) => {
+        if (item.hasSubmenu) {
+          const isParentActive = isCircleFamilyPage || isDiscoverSkillPage || isCircleFamilyInvitationPage;
+          return (
+            <div key={item.href}>
+              <button
+                onClick={() => setCircleFamilyExpanded(!circleFamilyExpanded)}
+                className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
+                  isParentActive
+                    ? "bg-[#D6EAD9] text-[#2E5239]"
+                    : "text-[#6B5B45] hover:bg-[#D6EAD9] hover:text-[#2E5239]"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+                </div>
+                <div className="flex items-center">
+                  {(hasHalaqahInvitation || hasJoinRequests) && (
+                    <span className="h-2 w-2 rounded-full bg-red-500 mr-2" />
+                  )}
+                  {circleFamilyExpanded ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </div
+>
+              </button>
+
+              {circleFamilyExpanded && (
+                <div className="ml-6 mt-1 space-y-1">
+                  {circleFamilySubItems.map((subItem) => (
+                    <Link
+                      key={subItem.href}
+                      href={subItem.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex items-center gap-3 px-3 py-2 text-sm rounded-lg font-medium transition-all ${
+                        pathname === subItem.href
+                          ? "bg-[#EDE4D3] text-[#3B2F1E]"
+                          : "text-[#6B5B45] hover:bg-[#EDE4D3] hover:text-[#3B2F1E]"
+                      }`}
+                    >
+                      <subItem.icon className="h-4 w-4" />
+                      {subItem.label}
+                      {subItem.href === "/invitations/circle-family" && hasHalaqahInvitation && (
+                        <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+                      )}
+                      {subItem.href === "/circle-family/requests" && hasJoinRequests && (
+                        <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={() => setMobileMenuOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
+              pathname === item.href
+                ? "bg-[#D6EAD9] text-[#2E5239]"
+                : "text-[#6B5B45] hover:bg-[#D6EAD9] hover:text-[#2E5239]"
+            }`}
+          >
+            <item.icon className="h-5 w-5" />
+            {item.label}
+
+            {item.href === "/chat" && hasUnreadChat && (
+              <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+            )}
+
+            {item.href === "/tree" && hasPendingInvitation && (
+              <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+            )}
+          </Link>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="h-screen flex flex-col bg-[#F5F0E8] overflow-hidden">
@@ -164,31 +316,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
           ].join(" ")}
         >
           <div className="bg-[#FDFAF5] rounded-xl border border-[#D4C4A8] p-4 shadow-sm">
-            <div className="space-y-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
-                    pathname === item.href
-                      ? "bg-[#D6EAD9] text-[#2E5239]"
-                      : "text-[#6B5B45] hover:bg-[#D6EAD9] hover:text-[#2E5239]"
-                  }`}
-                >
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-
-                  {item.href === "/chat" && hasUnreadChat && (
-                    <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
-                  )}
-
-                  {item.href === "/tree" && hasPendingInvitation && (
-                    <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
-                  )}
-                </Link>
-              ))}
-            </div>
+            {renderNavItems()}
           </div>
         </nav>
 
@@ -199,31 +327,7 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
           onClick={() => setMobileMenuOpen(false)}
         >
           <div className="absolute left-0 top-0 h-full w-56 bg-[#FDFAF5] border-r border-[#D4C4A8] p-4">
-            <div className="space-y-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
-                    pathname === item.href
-                      ? "bg-[#D6EAD9] text-[#2E5239]"
-                      : "text-[#6B5B45] hover:bg-[#D6EAD9] hover:text-[#2E5239]"
-                  }`}
-                >
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-
-                  {item.href === "/chat" && hasUnreadChat && (
-                    <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
-                  )}
-
-                  {item.href === "/tree" && hasPendingInvitation && (
-                    <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
-                  )}
-                </Link>
-              ))}
-            </div>
+            {renderNavItems()}
           </div>
         </nav>
 

@@ -51,14 +51,29 @@ export async function verifyAuth(request: NextRequest) {
     const userUuid = payload.sub as string;
 
     // Resolve local integer user ID from UUID (needed for family_members, etc.)
+    // Also fetch the node_id via join to nodes table
     let localUserId: number | null = null;
+    let nodeId: number | null = null;
+    let nuclearFamilyId: number | null = null;
     try {
       const userRes = await pool.query(
-        'SELECT id FROM users WHERE uuid = $1',
+        'SELECT u.id, n.id as node_id FROM users u LEFT JOIN nodes n ON n.user_id = u.id WHERE u.uuid = $1',
         [userUuid]
       );
       if (userRes.rows.length > 0) {
         localUserId = userRes.rows[0].id;
+        nodeId = userRes.rows[0].node_id;
+        
+        // Get nuclear family id from node (active membership only)
+        if (nodeId) {
+          const nfRes = await pool.query(
+            'SELECT nuclear_family_id FROM nuclear_family_memberships WHERE node_id = $1 AND left_at IS NULL LIMIT 1',
+            [nodeId]
+          );
+          if (nfRes.rows.length > 0) {
+            nuclearFamilyId = nfRes.rows[0].nuclear_family_id;
+          }
+        }
       }
     } catch (dbErr) {
       console.error('Failed to resolve user id from uuid in auth:', dbErr);
@@ -72,6 +87,7 @@ export async function verifyAuth(request: NextRequest) {
       success: true as const,
       userId: localUserId,      // integer local DB ID (used by family_members, chat_rooms logic, etc.)
       userUuid: userUuid,       // UUID from JWT (used as sender_id in Supabase + auth.uid())
+      nuclearFamilyId,          // nuclear family ID for halaqah invites
       payload,
     };
   } catch (err) {
@@ -95,6 +111,7 @@ export async function requireAuth(request: NextRequest) {
   return { 
     userId: result.userId,     // integer local ID
     userUuid: result.userUuid, // UUID for Supabase
+    nuclearFamilyId: result.nuclearFamilyId, // nuclear family ID
     payload: result.payload 
   };
 }

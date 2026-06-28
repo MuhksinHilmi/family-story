@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       'SELECT id FROM halaqah_invites WHERE sender_node_id = $1 AND target_nuclear_family_id = $2 AND status = \'pending\'',
       [senderNodeId, target_nuclear_family_id]
     );
-    if (inviteCheck.rowCount > 0) {
+    if (inviteCheck.rowCount && inviteCheck.rowCount > 0) {
       return NextResponse.json({ error: 'Undangan masih tertunda (pending)' }, { status: 400 });
     }
 
