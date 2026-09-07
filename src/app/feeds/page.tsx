@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo } from "react";
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Heart,
@@ -19,10 +19,11 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api-client";
-import dynamic from 'next/dynamic';
-const FocusedFeedModal = dynamic(() => import('./FocusedFeedModal'), { ssr: false });
-import { renderWithMentions } from '@/lib/mentions';
-
+import dynamic from "next/dynamic";
+const FocusedFeedModal = dynamic(() => import("./FocusedFeedModal"), {
+  ssr: false,
+});
+import { renderWithMentions } from "@/lib/mentions";
 
 interface Feed {
   id: string;
@@ -69,7 +70,9 @@ export default function FeedsPage() {
   const [flippedFeedId, setFlippedFeedId] = useState<string | null>(null);
   const [comments, setComments] = useState<Record<string, CommentItem[]>>({});
   const [commentText, setCommentText] = useState<Record<string, string>>({});
-  const [loadingComments, setLoadingComments] = useState<Record<string, boolean>>({});
+  const [loadingComments, setLoadingComments] = useState<
+    Record<string, boolean>
+  >({});
 
   // Stable flip card height measurement
   const frontRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -78,22 +81,24 @@ export default function FeedsPage() {
   // comment input refs and mention autocomplete state (single active feed at a time)
   const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [extendedContacts, setExtendedContacts] = useState<any[]>([]);
-  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionQuery, setMentionQuery] = useState("");
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionActive, setMentionActive] = useState(0);
-  const [mentionAnchorIndex, setMentionAnchorIndex] = useState<number | null>(null);
+  const [mentionAnchorIndex, setMentionAnchorIndex] = useState<number | null>(
+    null,
+  );
   const [mentionFeedId, setMentionFeedId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchContacts = async () => {
       try {
-        const res = await apiFetch('/api/user/extended-contacts');
+        const res = await apiFetch("/api/user/extended-contacts");
         if (res.ok) {
           const data = await res.json();
           setExtendedContacts(data.contacts || []);
         }
       } catch (e) {
-        console.warn('Failed to fetch extended contacts for feed mentions', e);
+        console.warn("Failed to fetch extended contacts for feed mentions", e);
       }
     };
     fetchContacts();
@@ -102,7 +107,9 @@ export default function FeedsPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Image preview modal state
-  const [preview, setPreview] = useState<{ feed: Feed; index: number } | null>(null);
+  const [preview, setPreview] = useState<{ feed: Feed; index: number } | null>(
+    null,
+  );
 
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -169,7 +176,9 @@ export default function FeedsPage() {
 
         if (isRefresh) {
           const existingIds = new Set(feeds.map((f) => f.id));
-          const newOnes = data.feeds.filter((f: Feed) => !existingIds.has(f.id));
+          const newOnes = data.feeds.filter(
+            (f: Feed) => !existingIds.has(f.id),
+          );
 
           if (newOnes.length > 0) {
             setFeeds((prev) => [...newOnes, ...prev]);
@@ -202,19 +211,21 @@ export default function FeedsPage() {
 
     const fetchFocused = async () => {
       try {
-        console.log('DEBUG: attempting fetch focused feed, focusId=', fid);
+        console.log("DEBUG: attempting fetch focused feed, focusId=", fid);
         const res = await apiFetch(`/api/feeds/${fid}`);
-        console.log('DEBUG: focused fetch status=', res.status);
+        console.log("DEBUG: focused fetch status=", res.status);
         if (res.ok) {
           const data = await res.json();
-          console.log('DEBUG: focused feed data=', data?.id);
+          console.log("DEBUG: focused feed data=", data?.id);
           setFocusedFeed(data);
           return;
         }
 
         // If unauthorized, redirect to login preserving next param
         if (res.status === 401) {
-          const next = encodeURIComponent(window.location.pathname + window.location.search);
+          const next = encodeURIComponent(
+            window.location.pathname + window.location.search,
+          );
           // Defer navigation to avoid interfering with React render/hook ordering
           setTimeout(() => {
             window.location.href = `/auth/login?next=${next}`;
@@ -224,10 +235,10 @@ export default function FeedsPage() {
 
         // other errors: remove focus param
         const url = new URL(window.location.href);
-        url.searchParams.delete('focus');
+        url.searchParams.delete("focus");
         router.replace(url.pathname + url.search, { scroll: false });
       } catch (e) {
-        console.warn('Failed to load focused feed', e);
+        console.warn("Failed to load focused feed", e);
       }
     };
     fetchFocused();
@@ -400,7 +411,8 @@ export default function FeedsPage() {
   const goPrev = () => {
     if (!preview || preview.feed.media.length === 0) return;
     const newIndex =
-      (preview.index - 1 + preview.feed.media.length) % preview.feed.media.length;
+      (preview.index - 1 + preview.feed.media.length) %
+      preview.feed.media.length;
     setPreview({ ...preview, index: newIndex });
   };
 
@@ -441,21 +453,25 @@ export default function FeedsPage() {
     setCardHeights((prev) => ({ ...prev, ...heights }));
   }, [flippedFeedId]);
 
-  const filteredMentionOptions = () => extendedContacts
-    .filter((p: any) => p.full_name.toLowerCase().includes(mentionQuery.toLowerCase()))
-    .slice(0, 8);
+  const filteredMentionOptions = () =>
+    extendedContacts
+      .filter((p: any) =>
+        p.full_name.toLowerCase().includes(mentionQuery.toLowerCase()),
+      )
+      .slice(0, 8);
 
   const selectMentionForFeed = (feedId: string, person: any) => {
-    const cur = commentText[feedId] || '';
+    const cur = commentText[feedId] || "";
     if (mentionAnchorIndex == null || mentionFeedId !== feedId) return;
     const before = cur.slice(0, mentionAnchorIndex);
-    const afterStart = mentionAnchorIndex + 1 + (mentionQuery ? mentionQuery.length : 0);
+    const afterStart =
+      mentionAnchorIndex + 1 + (mentionQuery ? mentionQuery.length : 0);
     const after = cur.slice(afterStart);
     const insert = `@${person.full_name} `;
     const newText = before + insert + after;
     setCommentText((prev) => ({ ...prev, [feedId]: newText }));
     setShowMentionDropdown(false);
-    setMentionQuery('');
+    setMentionQuery("");
     setMentionFeedId(null);
 
     // set caret
@@ -469,35 +485,17 @@ export default function FeedsPage() {
     }, 0);
   };
 
-
   const getScopeIcon = (feed: Feed) => {
-    if (feed.scope_type === "nuclear") {
-      return (
-        <div
-          title="Keluarga Inti"
-          className="w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center"
-        >
-          <Lock size={13} className="text-white" />
-        </div>
-      );
-    }
-    if (feed.scope_type === "custom") {
-      return (
-        <div
-          title="Pilih Manual"
-          className="w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center"
-        >
-          <Users size={13} className="text-white" />
-        </div>
-      );
-    }
-    // extended (default)
+    const title =
+      feed.scope_type === "nuclear"
+        ? "Keluarga Inti"
+        : feed.scope_type === "custom"
+          ? "Pilih Manual"
+          : "Keluarga Besar";
+    const Icon = feed.scope_type === "nuclear" ? Lock : Users;
     return (
-      <div
-        title="Keluarga Besar"
-        className="w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center"
-      >
-        <Users size={13} className="text-white" />
+      <div title={title} className="ck-feed-scope">
+        <Icon size={13} />
       </div>
     );
   };
@@ -554,522 +552,856 @@ export default function FeedsPage() {
   };
 
   return (
-    <div ref={scrollContainerRef} className="overflow-y-auto h-full">
-      <div className="max-w-2xl mx-auto pb-10">
-        <div className="sticky top-0 z-40 px-4 pt-5 pb-3 bg-[#F5F0E8] ">
-          {/* Row 1: Greeting + Date + Refresh */}
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-xs text-[#9C8B75]">{greeting}</div>
-              <h3 className="text-2xl font-bold text-[#2C1A0E] leading-none mt-0.5">
-                Halo, {firstName}!
-              </h3>
-            </div>
-
-            <div className="text-right">
-              <div className="text-xs text-[#9C8B75]">{todayDate}</div>
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="mt-1 w-8 h-8 flex items-center justify-center rounded-full border border-[#D4C4A8] hover:bg-[#EDE4D3] disabled:opacity-60 transition"
-              >
-                <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
-              </button>
-            </div>
+    <div className="ck-feed-page">
+      {/* ── Sticky header ── */}
+      <div className="ck-feed-header">
+        <div className="ck-feed-header-row1">
+          <div>
+            <p className="ck-feed-greeting">{greeting}</p>
+            <h2 className="ck-feed-hello">Halo, {firstName}!</h2>
           </div>
-
-          {/* Row 2: Tagline + Create button */}
-          <div className="flex items-center justify-between mt-3">
-            <p className="text-xs italic text-[#A07850]">
-              Bagikan momen bersama keluarga
-            </p>
-
-            <Link
-              href="/feeds/new"
-              className="px-5 py-2.5 bg-[#4A7C59] hover:bg-[#2E5239] text-white rounded-2xl text-sm font-semibold shadow-md hover:shadow-lg transition"
-            >
-              + Momen
-            </Link>
-          </div>
-        </div>
-
-        {/* Banner "X feed baru dimuat" */}
-        {newFeedsCount > 0 && (
-          <div className="mx-4 mt-3 mb-1 px-4 py-2 bg-green-100 text-green-700 text-sm rounded-xl flex items-center justify-between">
-            <span>{newFeedsCount} feed baru dimuat</span>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: 0,
+            }}
+          >
+            <p className="ck-feed-date">{todayDate}</p>
             <button
-              onClick={() => setNewFeedsCount(0)}
-              className="text-green-600 hover:text-green-800"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="ck-feed-refresh-btn"
+              aria-label="Muat ulang feed"
             >
-              ×
+              <RefreshCw
+                size={15}
+                className={refreshing ? "animate-spin" : ""}
+              />
             </button>
           </div>
-        )}
+        </div>
+        <div className="ck-feed-header-row2">
+          <p className="ck-feed-tagline">Bagikan momen bersama keluarga</p>
+          <Link href="/feeds/new" className="ck-feed-new-btn">
+            <Plus size={14} />
+            Momen
+          </Link>
+        </div>
+      </div>
 
-        {loading ? (
-          <div className="text-center py-10 text-[#9C8B75]">
-            Memuat feeds...
-          </div>
-        ) : feeds.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-            <div className="mb-8">
-              <div className="relative w-64 h-40 mx-auto">
-                <div className="absolute top-4 left-4 w-56 h-32 bg-[#D4C4A8] rounded-xl shadow-md rotate-[-6deg]" />
-                <div className="absolute top-0 left-0 w-56 h-32 bg-[#EDE4D3] border border-[#C4B39A] rounded-xl shadow-lg flex items-center justify-center">
-                  <div className="grid grid-cols-2 gap-2 p-4 w-full h-full">
-                    <div className="bg-[#F5F0E8] border border-[#D4C4A8] rounded flex items-center justify-center">
-                      <Image className="text-[#C4B39A]" size={28} />
-                    </div>
-                    <div className="bg-[#F5F0E8] border border-[#D4C4A8] rounded flex items-center justify-center">
-                      <Users className="text-[#C4B39A]" size={28} />
-                    </div>
-                    <div className="bg-[#F5F0E8] border border-[#D4C4A8] rounded flex items-center justify-center">
-                      <Calendar className="text-[#C4B39A]" size={28} />
-                    </div>
-                    <div className="bg-[#F5F0E8] border border-[#D4C4A8] rounded flex items-center justify-center">
-                      <Heart className="text-[#C4B39A]" size={28} />
-                    </div>
-                  </div>
-                </div>
-              </div>
+      {/* ── Scrollable body ── */}
+      <div ref={scrollContainerRef} className="ck-feed-body">
+        <div className="ck-feed-list">
+          {/* New feeds banner */}
+          {newFeedsCount > 0 && (
+            <div className="ck-feed-new-banner">
+              <span>{newFeedsCount} momen baru dimuat</span>
+              <button
+                onClick={() => setNewFeedsCount(0)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "inherit",
+                  fontSize: "1rem",
+                  lineHeight: 1,
+                }}
+                aria-label="Tutup banner"
+              >
+                ×
+              </button>
             </div>
+          )}
 
-            <h2 className="text-2xl font-semibold text-[#3B2F1E] mb-3">
-              Belum ada momen
-            </h2>
-
-            <p className="max-w-md text-[#6B5B45] mb-2 leading-relaxed">
-              Mulailah dengan berbagi foto, video, atau cerita kecil hari ini.
-            </p>
-
-            <p className="max-w-md text-sm text-[#9C8B75] mb-8">
-              Setiap momen yang kamu bagikan akan tersimpan dalam sejarah keluarga.
-            </p>
-
-            <Link
-              href="/feeds/new"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-[#4A7C59] hover:bg-[#2E5239] text-white rounded-2xl font-medium shadow-sm transition"
+          {loading ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "3rem 0",
+                color: "var(--ck-dash-text3)",
+                fontSize: "0.875rem",
+              }}
             >
-              <Plus size={20} />
-              Bagikan Momen Pertamamu
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-6 px-4">
-            {feeds.map((feed) => (
-              <div key={feed.id} style={{ perspective: "1000px" }} className="w-full">
-                <div
-                  className="relative grid w-full"
-                  style={{
-                    transformStyle: "preserve-3d",
-                    transition: "transform 0.55s cubic-bezier(0.4, 0.2, 0.2, 1)",
-                    transform: flippedFeedId === feed.id ? "rotateY(180deg)" : "rotateY(0deg)",
-                    gridTemplateAreas: '"stack"',
-                    minHeight: cardHeights[feed.id] ? `${cardHeights[feed.id]}px` : undefined,
-                  }}
-                >
-                  {/* ===== SISI DEPAN (FOTO + KONTEN ASLI) ===== */}
+              Memuat momen keluarga...
+            </div>
+          ) : feeds.length === 0 ? (
+            /* Empty state */
+            <div className="ck-feed-empty">
+              <div className="ck-feed-empty-icon">
+                <Image size={24} />
+              </div>
+              <h3 className="ck-feed-empty-title">Belum ada momen</h3>
+              <p className="ck-feed-empty-sub">
+                Mulailah dengan berbagi foto, video, atau cerita kecil hari ini.
+                Setiap momen yang kamu bagikan akan tersimpan dalam sejarah
+                keluarga.
+              </p>
+              <Link href="/feeds/new" className="ck-feed-new-btn">
+                <Plus size={15} />
+                Bagikan Momen Pertama
+              </Link>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem",
+              }}
+            >
+              {feeds.map((feed) => (
+                <div key={feed.id} style={{ perspective: "1000px" }}>
                   <div
-                    ref={(el) => { frontRefs.current[feed.id] = el; }}
-                    style={{ gridArea: "stack", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
-                    className="w-full bg-white border border-[#D4C4A8] rounded-2xl overflow-hidden shadow-sm"
+                    style={{
+                      display: "grid",
+                      gridTemplateAreas: '"stack"',
+                      transformStyle: "preserve-3d",
+                      transition: "transform 0.5s cubic-bezier(0.4,0.2,0.2,1)",
+                      transform:
+                        flippedFeedId === feed.id
+                          ? "rotateY(180deg)"
+                          : "rotateY(0deg)",
+                      minHeight: cardHeights[feed.id]
+                        ? `${cardHeights[feed.id]}px`
+                        : undefined,
+                    }}
                   >
-                    {/* Media area — full width, no border, no padding */}
-                    <div className="relative">
-                      {/* Media */}
-                      {renderMedia(feed.media, (idx) => openPreview(feed, idx))}
+                    {/* SISI DEPAN */}
+                    <div
+                      ref={(el) => {
+                        frontRefs.current[feed.id] = el;
+                      }}
+                      style={{
+                        gridArea: "stack",
+                        backfaceVisibility: "hidden",
+                        WebkitBackfaceVisibility: "hidden",
+                      }}
+                      className="ck-feed-card"
+                    >
+                      <div style={{ position: "relative" }}>
+                        {renderMedia(feed.media, (idx) =>
+                          openPreview(feed, idx),
+                        )}
+                        {feed.media && feed.media.length > 0 && (
+                          <>
+                            <div
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                background:
+                                  "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 40%, transparent 100%)",
+                                pointerEvents: "none",
+                              }}
+                            />
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: 10,
+                                left: 12,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
+                              <div
+                                className="ck-feed-avatar"
+                                style={{ width: 30, height: 30 }}
+                              >
+                                {feed.user_photo && (
+                                  <img src={feed.user_photo} alt="" />
+                                )}
+                              </div>
+                              <div>
+                                <p
+                                  style={{
+                                    color: "#fff",
+                                    fontSize: "0.75rem",
+                                    fontWeight: 600,
+                                    lineHeight: 1.2,
+                                    textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+                                  }}
+                                >
+                                  {feed.user_name}
+                                </p>
+                                <p
+                                  style={{
+                                    color: "rgba(255,255,255,0.8)",
+                                    fontSize: "0.625rem",
+                                    textShadow: "0 1px 3px rgba(0,0,0,0.7)",
+                                  }}
+                                >
+                                  {new Date(feed.created_at).toLocaleDateString(
+                                    "id-ID",
+                                    {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    },
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: 10,
+                                right: 12,
+                              }}
+                            >
+                              {getScopeIcon(feed)}
+                            </div>
+                          </>
+                        )}
+                      </div>
 
-                      {/* Overlay: gradient at the top for legibility (stronger for bright images) */}
-                      {feed.media && feed.media.length > 0 && (
-                        <div
-                          className="absolute inset-x-0 top-0 h-24 
-                        bg-gradient-to-b from-black/80 via-black/50 to-transparent pointer-events-none"
-                        />
-                      )}
-
-                      {/* Overlay: user info top-left */}
-                      {feed.media && feed.media.length > 0 && (
-                        <div className="absolute top-3 left-3 flex items-center gap-2">
-                          <div
-                            className="w-8 h-8 rounded-full bg-[#EDE4D3] overflow-hidden 
-                          ring-2 ring-white/60 flex-shrink-0"
-                          >
-                            {feed.user_photo && (
-                              <img
-                                src={feed.user_photo}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-white text-xs font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
-                              {feed.user_name}
-                            </p>
-                            <p className="text-white/90 text-[10px] drop-shadow-[0_1px_4px_rgba(0,0,0,0.85)]">
-                              {new Date(feed.created_at).toLocaleDateString(
-                                "id-ID",
-                                {
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                },
+                      {(!feed.media || feed.media.length === 0) && (
+                        <div className="ck-feed-card-header">
+                          <div className="ck-feed-card-author">
+                            <div className="ck-feed-avatar">
+                              {feed.user_photo && (
+                                <img src={feed.user_photo} alt="" />
                               )}
-                            </p>
+                            </div>
+                            <div>
+                              <p className="ck-feed-author-name">
+                                {feed.user_name}
+                              </p>
+                              <p className="ck-feed-author-time">
+                                {new Date(feed.created_at).toLocaleDateString(
+                                  "id-ID",
+                                  {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  },
+                                )}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      )}
-
-                      {/* Overlay: scope icon top-right */}
-                      {feed.media && feed.media.length > 0 && (
-                        <div className="absolute top-3 right-3">
                           {getScopeIcon(feed)}
                         </div>
                       )}
-                    </div>
 
-                    {/* If NO media: show user info as normal card header */}
-                    {(!feed.media || feed.media.length === 0) && (
-                      <div
-                        className="flex items-center justify-between px-4 py-3 border-b 
-                      border-[#D4C4A8]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-[#EDE4D3] overflow-hidden">
-                            {feed.user_photo && (
-                              <img
-                                src={feed.user_photo}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
+                      {feed.caption && (
+                        <div className="ck-feed-caption">
+                          {renderWithMentions(feed.caption, (name: string) => {
+                            router.push(
+                              `/tree?focus_name=${encodeURIComponent(name)}`,
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="ck-feed-actions">
+                        <div className="ck-feed-action-left">
+                          <button
+                            onClick={() => toggleLike(feed.id, feed.has_liked)}
+                            className={`ck-feed-action-btn${feed.has_liked ? " liked" : ""}`}
+                            aria-label={feed.has_liked ? "Hapus suka" : "Suka"}
+                          >
+                            <Heart
+                              size={16}
+                              fill={feed.has_liked ? "currentColor" : "none"}
+                            />
+                            <span>{feed.like_count}</span>
+                          </button>
+                          <button
+                            onClick={() => toggleFlip(feed.id)}
+                            className="ck-feed-action-btn"
+                            aria-label="Lihat komentar"
+                          >
+                            <MessageCircle size={16} />
+                            <span>{feed.comment_count}</span>
+                          </button>
+                        </div>
+                        {(feed.other_viewer_count ?? 0) > 0 && (
+                          <div
+                            style={{ display: "flex", alignItems: "center" }}
+                          >
+                            {feed.other_viewers?.slice(0, 5).map((viewer) => (
+                              <Avatar
+                                key={viewer.id}
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  border: "2px solid var(--ck-dash-card)",
+                                  marginLeft: -4,
+                                }}
+                                title={viewer.full_name}
+                              >
+                                {viewer.photo_url && (
+                                  <AvatarImage
+                                    src={viewer.photo_url}
+                                    alt={viewer.full_name}
+                                  />
+                                )}
+                                <AvatarFallback
+                                  style={{
+                                    fontSize: "0.5625rem",
+                                    background: "var(--ck-dash-surface)",
+                                    color: "var(--ck-dash-text2)",
+                                  }}
+                                >
+                                  {viewer.full_name?.[0]?.toUpperCase() ?? "?"}
+                                </AvatarFallback>
+                              </Avatar>
+                            ))}
+                            {(feed.other_viewer_count ?? 0) > 5 && (
+                              <span
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: "50%",
+                                  marginLeft: -4,
+                                  background: "var(--ck-dash-surface)",
+                                  border: "2px solid var(--ck-dash-card)",
+                                  fontSize: "0.5625rem",
+                                  fontWeight: 600,
+                                  color: "var(--ck-dash-text3)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                +{(feed.other_viewer_count ?? 0) - 5}
+                              </span>
                             )}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-sm">
-                              {feed.user_name}
-                            </p>
-                            <p className="text-[10px] text-[#9C8B75]">
-                              {new Date(feed.created_at).toLocaleDateString(
-                                "id-ID",
-                                {
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                },
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <div>{getScopeIcon(feed)}</div>
-                      </div>
-                    )}
-
-                    {/* Caption */}
-                    {feed.caption && (
-                      <div className="px-4 py-3 text-sm text-[#3B2F1E] whitespace-pre-line">
-                        {renderWithMentions(feed.caption, (name:string)=>{ const q=encodeURIComponent(name); router.push(`/tree?focus_name=${q}`); })}
-                      </div>
-                    )}
-
-                     {/* Action bar */}
-                     <div className="px-4 py-3 border-t border-[#D4C4A8] flex flex-row items-center justify-between text-sm min-h-[44px] flex-nowrap">
-                      {/* Left: Like + Comment */}
-                      <div className="flex items-center gap-5">
-                        <button
-                          onClick={() => toggleLike(feed.id, feed.has_liked)}
-                          className={`flex items-center gap-1.5 ${feed.has_liked ? "text-red-500" : "text-[#6B5B45]"}`}
-                        >
-                          <Heart className={feed.has_liked ? "fill-current" : ""} size={18} />
-                          <span>{feed.like_count}</span>
-                        </button>
-                        <button
-                          onClick={() => toggleFlip(feed.id)}
-                          className="flex items-center gap-1.5 text-[#6B5B45] hover:text-[#4A7C59] active:scale-[0.985] transition"
-                        >
-                          <MessageCircle size={18} />
-                          <span>{feed.comment_count}</span>
-                        </button>
-                      </div>
-
-                      {/* Right: Viewers avatars (who can see this feed, excluding self) */}
-                      {feed.other_viewer_count && feed.other_viewer_count > 0 && (
-                        <div className="flex items-center -space-x-1.5 flex-shrink-0 max-w-[160px] overflow-hidden p-2">
-                          {feed.other_viewers?.slice(0, 9).map((viewer) => (
-                            <Avatar
-                              key={viewer.id}
-                              className="w-8 h-8 border border-white ring-1 ring-[#D4C4A8]"
-                              title={viewer.full_name}
-                            >
-                              {viewer.photo_url && <AvatarImage src={viewer.photo_url} alt={viewer.full_name} />}
-                              <AvatarFallback className="bg-[#EDE4D3] text-[#6B5B45] text-[10px] font-semibold">
-                                {viewer.full_name ? viewer.full_name[0].toUpperCase() : "?"}
-                              </AvatarFallback>
-                            </Avatar>
-                          ))}
-                          {(feed.other_viewer_count ?? 0) > 9 && (
-                            <div
-                              className="w-6 h-6 rounded-full bg-[#EDE4D3] text-[#6B5B45] text-[9px] font-medium flex items-center justify-center border border-white ring-1 ring-[#D4C4A8]"
-                              title={`${feed.other_viewer_count} orang bisa melihat`}
-                            >
-                              +{feed.other_viewer_count - 9}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* ===== SISI BELAKANG (COMMENT) ===== */}
-                  <div
-                    style={{
-                      gridArea: "stack",
-                      backfaceVisibility: "hidden",
-                      WebkitBackfaceVisibility: "hidden",
-                      transform: "rotateY(180deg)",
-                      height: cardHeights[feed.id] ? `${cardHeights[feed.id]}px` : "100%",
-                    }}
-                    className="w-full bg-[#FDFAF5] border border-[#D4C4A8] rounded-2xl overflow-visible shadow-sm flex flex-col"
-                  >
-                    {/* Header belakang card */}
-                    <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-[#D4C4A8] bg-white">
-                      <div className="flex items-center gap-2">
-                        <MessageCircle size={16} className="text-[#4A7C59]" />
-                        <span className="text-sm font-semibold text-[#3B2F1E]">
-                          Komentar ({feed.comment_count})
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => setFlippedFeedId(null)}
-                        className="text-xs text-[#9C8B75] hover:text-[#3B2F1E] flex items-center gap-1 transition"
-                      >
-                        <ChevronLeft size={14} />
-                        Kembali
-                      </button>
-                    </div>
-
-                    {/* List comment — internal scroll only */}
-                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-                      {loadingComments[feed.id] ? (
-                        <div className="flex justify-center py-6">
-                          <span className="animate-spin w-5 h-5 border-2 border-[#4A7C59] border-t-transparent rounded-full" />
-                        </div>
-                      ) : (comments[feed.id] || []).length === 0 ? (
-                        <div className="text-center py-8 text-[#9C8B75] text-sm">
-                          Belum ada komentar. Jadilah yang pertama! 💬
-                        </div>
-                      ) : (
-                        (comments[feed.id] || []).map((comment) => (
-                          <div key={comment.id} className="flex gap-2.5 items-start">
-                            <div className="w-7 h-7 rounded-full bg-[#EDE4D3] overflow-hidden flex-shrink-0 mt-0.5">
-                              {comment.user_photo && (
-                                <img
-                                  src={comment.user_photo}
-                                  alt=""
-                                  className="w-full h-full object-cover"
-                                />
-                              )}
-                            </div>
-                            <div className="flex-1 bg-white rounded-xl px-3 py-2 border border-[#E8DFD0] shadow-sm">
-                              <p className="text-xs font-semibold text-[#3B2F1E]">
-                                {comment.user_name}
-                              </p>
-                              <p className="text-sm text-[#4B3B2A] leading-snug mt-0.5">
-                                {renderWithMentions(comment.content)}
-                              </p>
-                              <p className="text-[10px] text-[#B0A090] mt-1">
-                                {new Date(comment.created_at).toLocaleDateString("id-ID", {
-                                  day: "numeric",
-                                  month: "short",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </p>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    {/* Input comment */}
-                    <div className="flex-shrink-0 px-4 py-3 border-t border-[#D4C4A8] bg-white flex gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          ref={el => { commentInputRefs.current[feed.id] = el; }}
-                          type="text"
-                          value={commentText[feed.id] || ""}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setCommentText((prev) => ({ ...prev, [feed.id]: val }));
-
-                            // detect mention token before caret
-                            const input = e.target as HTMLInputElement;
-                            const cursor = input.selectionStart || 0;
-                            const pre = val.slice(0, cursor);
-                            const m = pre.match(/@([\w\.-]*)$/);
-                            if (m) {
-                              setMentionQuery(m[1]);
-                              setShowMentionDropdown(true);
-                              setMentionAnchorIndex(cursor - m[1].length - 1);
-                              setMentionActive(0);
-                              setMentionFeedId(feed.id);
-                            } else if (mentionFeedId === feed.id) {
-                              setMentionQuery('');
-                              setShowMentionDropdown(false);
-                              setMentionAnchorIndex(null);
-                              setMentionFeedId(null);
-                            }
-                          }
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              if (showMentionDropdown && mentionFeedId === feed.id && filteredMentionOptions().length > 0) {
-                                e.preventDefault();
-                                selectMentionForFeed(feed.id, filteredMentionOptions()[0]);
-                                return;
-                              }
-                              submitComment(feed.id);
-                            }
-                            if (showMentionDropdown && mentionFeedId === feed.id) {
-                              if (e.key === 'ArrowDown') { e.preventDefault(); setMentionActive((s) => Math.min(s+1, Math.max(0, filteredMentionOptions().length-1))); }
-                              if (e.key === 'ArrowUp') { e.preventDefault(); setMentionActive((s) => Math.max(0, s-1)); }
-                              if (e.key === 'Escape') { setShowMentionDropdown(false); setMentionFeedId(null); }
-                            }
-                          }}
-                          placeholder="Tulis komentar..."
-                          className="w-full text-sm px-3 py-2 rounded-xl border border-[#D4C4A8] bg-[#FDFAF5] focus:outline-none focus:ring-1 focus:ring-[#4A7C59] text-[#3B2F1E] placeholder:text-[#B0A090]"
-                        />
-
-                        {showMentionDropdown && mentionFeedId === feed.id && (
-                          <div className="absolute left-0 z-50 w-full rounded-xl border border-[#D4C4A8] bg-white shadow-lg max-h-48 overflow-auto" style={{ bottom: 'calc(100% + 8px)' }}>
-                            {filteredMentionOptions().length > 0 ? filteredMentionOptions().map((p, i) => (
-                              <button key={p.id} type="button" onClick={() => selectMentionForFeed(feed.id, p)} className={`flex items-center gap-3 px-3 py-2 text-left text-sm ${i === mentionActive ? 'bg-[#F5F0E8]' : ''}`}>
-                                <div className="h-8 w-8 rounded-full bg-[#EDE4D3] flex-shrink-0 overflow-hidden flex items-center justify-center">{p.photo_url ? <img src={p.photo_url} className="w-full h-full object-cover"/> : <span className="text-[#6B5B45] text-xs font-semibold">{p.full_name[0].toUpperCase()}</span>}</div>
-                                <div>{p.full_name}</div>
-                              </button>
-                            )) : (<div className="px-3 py-2 text-sm text-[#9C8B75]">Tidak ada yang cocok</div>)}
                           </div>
                         )}
                       </div>
-                      <button
-                        onClick={() => submitComment(feed.id)}
-                        disabled={!commentText[feed.id]?.trim()}
-                        className="px-4 py-2 bg-[#4A7C59] hover:bg-[#2E5239] text-white rounded-xl text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    </div>
+
+                    {/* SISI BELAKANG */}
+                    <div
+                      style={{
+                        gridArea: "stack",
+                        backfaceVisibility: "hidden",
+                        WebkitBackfaceVisibility: "hidden",
+                        transform: "rotateY(180deg)",
+                        height: cardHeights[feed.id]
+                          ? `${cardHeights[feed.id]}px`
+                          : "100%",
+                      }}
+                      className="ck-feed-comment-card"
+                    >
+                      <div className="ck-feed-comment-header">
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <MessageCircle
+                            size={15}
+                            style={{ color: "var(--ck-dash-green)" }}
+                          />
+                          <span
+                            style={{
+                              fontSize: "0.875rem",
+                              fontWeight: 600,
+                              color: "var(--ck-dash-text1)",
+                            }}
+                          >
+                            Komentar ({feed.comment_count})
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => setFlippedFeedId(null)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: "0.75rem",
+                            color: "var(--ck-dash-text3)",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <ChevronLeft size={14} />
+                          Kembali
+                        </button>
+                      </div>
+
+                      <div
+                        style={{
+                          flex: 1,
+                          overflowY: "auto",
+                          padding: "0.875rem 1rem",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.75rem",
+                        }}
                       >
-                        Kirim
-                      </button>
+                        {loadingComments[feed.id] ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              padding: "1.5rem 0",
+                            }}
+                          >
+                            <span
+                              className="animate-spin"
+                              style={{
+                                width: 20,
+                                height: 20,
+                                border: "2px solid var(--ck-dash-green)",
+                                borderTopColor: "transparent",
+                                borderRadius: "50%",
+                                display: "inline-block",
+                              }}
+                            />
+                          </div>
+                        ) : (comments[feed.id] || []).length === 0 ? (
+                          <div
+                            style={{
+                              textAlign: "center",
+                              padding: "2rem 0",
+                              color: "var(--ck-dash-text3)",
+                              fontSize: "0.875rem",
+                            }}
+                          >
+                            Belum ada komentar. Jadilah yang pertama! 💬
+                          </div>
+                        ) : (
+                          (comments[feed.id] || []).map((comment) => (
+                            <div key={comment.id} className="ck-comment-item">
+                              <div className="ck-comment-avatar">
+                                {comment.user_photo && (
+                                  <img
+                                    src={comment.user_photo}
+                                    alt=""
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                    }}
+                                  />
+                                )}
+                              </div>
+                              <div className="ck-comment-bubble">
+                                <p className="ck-comment-name">
+                                  {comment.user_name}
+                                </p>
+                                <p className="ck-comment-text">
+                                  {renderWithMentions(comment.content)}
+                                </p>
+                                <p className="ck-comment-time">
+                                  {new Date(
+                                    comment.created_at,
+                                  ).toLocaleDateString("id-ID", {
+                                    day: "numeric",
+                                    month: "short",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="ck-feed-comment-input-row">
+                        <div style={{ position: "relative", flex: 1 }}>
+                          <input
+                            ref={(el) => {
+                              commentInputRefs.current[feed.id] = el;
+                            }}
+                            type="text"
+                            value={commentText[feed.id] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCommentText((prev) => ({
+                                ...prev,
+                                [feed.id]: val,
+                              }));
+                              const cursor = e.target.selectionStart || 0;
+                              const pre = val.slice(0, cursor);
+                              const m = pre.match(/@([\w\.-]*)$/);
+                              if (m) {
+                                setMentionQuery(m[1]);
+                                setShowMentionDropdown(true);
+                                setMentionAnchorIndex(cursor - m[1].length - 1);
+                                setMentionActive(0);
+                                setMentionFeedId(feed.id);
+                              } else if (mentionFeedId === feed.id) {
+                                setMentionQuery("");
+                                setShowMentionDropdown(false);
+                                setMentionAnchorIndex(null);
+                                setMentionFeedId(null);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                if (
+                                  showMentionDropdown &&
+                                  mentionFeedId === feed.id &&
+                                  filteredMentionOptions().length > 0
+                                ) {
+                                  e.preventDefault();
+                                  selectMentionForFeed(
+                                    feed.id,
+                                    filteredMentionOptions()[0],
+                                  );
+                                  return;
+                                }
+                                submitComment(feed.id);
+                              }
+                              if (
+                                showMentionDropdown &&
+                                mentionFeedId === feed.id
+                              ) {
+                                if (e.key === "ArrowDown") {
+                                  e.preventDefault();
+                                  setMentionActive((s) =>
+                                    Math.min(
+                                      s + 1,
+                                      filteredMentionOptions().length - 1,
+                                    ),
+                                  );
+                                }
+                                if (e.key === "ArrowUp") {
+                                  e.preventDefault();
+                                  setMentionActive((s) => Math.max(0, s - 1));
+                                }
+                                if (e.key === "Escape") {
+                                  setShowMentionDropdown(false);
+                                  setMentionFeedId(null);
+                                }
+                              }
+                            }}
+                            placeholder="Tulis komentar..."
+                            className="ck-feed-comment-input"
+                          />
+                          {showMentionDropdown && mentionFeedId === feed.id && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                bottom: "calc(100% + 8px)",
+                                width: "100%",
+                                zIndex: 50,
+                                background: "var(--ck-dash-card)",
+                                border: "1px solid var(--ck-dash-border)",
+                                borderRadius: "0.875rem",
+                                boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+                                maxHeight: 200,
+                                overflowY: "auto",
+                              }}
+                            >
+                              {filteredMentionOptions().length > 0 ? (
+                                filteredMentionOptions().map((p, i) => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() =>
+                                      selectMentionForFeed(feed.id, p)
+                                    }
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 10,
+                                      width: "100%",
+                                      padding: "0.5rem 0.875rem",
+                                      background:
+                                        i === mentionActive
+                                          ? "var(--ck-dash-surface)"
+                                          : "transparent",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      fontSize: "0.8125rem",
+                                      color: "var(--ck-dash-text1)",
+                                      textAlign: "left",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: 28,
+                                        height: 28,
+                                        borderRadius: "50%",
+                                        background: "var(--ck-dash-surface)",
+                                        overflow: "hidden",
+                                        flexShrink: 0,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        fontSize: "0.75rem",
+                                        fontWeight: 600,
+                                        color: "var(--ck-dash-text2)",
+                                      }}
+                                    >
+                                      {p.photo_url ? (
+                                        <img
+                                          src={p.photo_url}
+                                          style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            objectFit: "cover",
+                                          }}
+                                          alt=""
+                                        />
+                                      ) : (
+                                        p.full_name[0].toUpperCase()
+                                      )}
+                                    </div>
+                                    {p.full_name}
+                                  </button>
+                                ))
+                              ) : (
+                                <div
+                                  style={{
+                                    padding: "0.625rem 0.875rem",
+                                    fontSize: "0.8125rem",
+                                    color: "var(--ck-dash-text3)",
+                                  }}
+                                >
+                                  Tidak ada yang cocok
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => submitComment(feed.id)}
+                          disabled={!commentText[feed.id]?.trim()}
+                          className="ck-feed-comment-send"
+                        >
+                          Kirim
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
 
-        {/* Infinite scroll loading indicator */}
-        {loadingMore && (
-          <div className="flex justify-center py-6">
-            <div className="flex items-center gap-2 text-sm text-[#9C8B75]">
-              <span className="animate-spin inline-block w-4 h-4 border-2 border-[#4A7C59] border-t-transparent rounded-full" />
+          {loadingMore && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 8,
+                padding: "1.5rem 0",
+                color: "var(--ck-dash-text3)",
+                fontSize: "0.875rem",
+              }}
+            >
+              <span
+                className="animate-spin"
+                style={{
+                  width: 16,
+                  height: 16,
+                  border: "2px solid var(--ck-dash-green)",
+                  borderTopColor: "transparent",
+                  borderRadius: "50%",
+                  display: "inline-block",
+                }}
+              />
               Memuat lebih banyak...
             </div>
-          </div>
-        )}
+          )}
 
-        {!hasMore && feeds.length > 0 && !loadingMore && (
-          <p className="text-center text-xs text-[#9C8B75] py-6">
-            — Semua feed sudah dimuat —
-          </p>
-        )}
-
-        {/* Focused feed modal (from email link) */}
-        {focusedFeed && (
-          <FocusedFeedModal
-            feed={focusedFeed}
-            onClose={() => {
-              const url = new URL(window.location.href);
-              url.searchParams.delete('focus');
-              router.replace(url.pathname + url.search, { scroll: false });
-              setFocusedFeed(null);
-            }}
-          />
-        )}
-
-        {/* Elegant Image Preview Modal */}
-        {preview && preview.feed.media.length > 0 && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-            onClick={closePreview}
-          >
-            <div
-              className="relative max-h-[90vh] max-w-[90vw] w-full flex flex-col items-center"
-              onClick={(e) => e.stopPropagation()}
+          {!hasMore && feeds.length > 0 && !loadingMore && (
+            <p
+              style={{
+                textAlign: "center",
+                fontSize: "0.75rem",
+                color: "var(--ck-dash-text3)",
+                padding: "1.5rem 0",
+              }}
             >
-              {/* Close button */}
-              <button
-                onClick={closePreview}
-                className="absolute -top-2 -right-2 z-10 rounded-full bg-[#3B2F1E] p-2 text-white hover:bg-[#4A7C59] transition"
-                aria-label="Tutup preview"
-              >
-                <X size={20} />
-              </button>
+              — Semua momen sudah dimuat —
+            </p>
+          )}
+        </div>
+        {/* ck-feed-list */}
+      </div>
+      {/* ck-feed-body */}
 
-              {/* Main image */}
-              <img
-                src={preview.feed.media[preview.index].media_url}
-                alt={`preview-${preview.index}`}
-                className="max-h-[80vh] max-w-full object-contain rounded-xl shadow-2xl border border-[#D4C4A8]/30"
-              />
+      {/* Focused feed modal */}
+      {focusedFeed && (
+        <FocusedFeedModal
+          feed={focusedFeed}
+          onClose={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("focus");
+            router.replace(url.pathname + url.search, { scroll: false });
+            setFocusedFeed(null);
+          }}
+        />
+      )}
 
-              {/* Navigation */}
-              {preview.feed.media.length > 1 && (
-                <>
-                  <button
-                    onClick={goPrev}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-[#4A7C59] transition"
-                    aria-label="Foto sebelumnya"
+      {/* Image preview modal */}
+      {preview && preview.feed.media.length > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.92)",
+            padding: "1rem",
+          }}
+          onClick={closePreview}
+        >
+          <div
+            style={{
+              position: "relative",
+              maxHeight: "90vh",
+              maxWidth: "90vw",
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={closePreview}
+              style={{
+                position: "absolute",
+                top: -8,
+                right: -8,
+                zIndex: 10,
+                width: 34,
+                height: 34,
+                borderRadius: "50%",
+                background: "#1a1a1a",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#fff",
+              }}
+              aria-label="Tutup preview"
+            >
+              <X size={18} />
+            </button>
+            <img
+              src={preview.feed.media[preview.index].media_url}
+              alt={`preview-${preview.index}`}
+              style={{
+                maxHeight: "80vh",
+                maxWidth: "100%",
+                objectFit: "contain",
+                borderRadius: "0.875rem",
+              }}
+            />
+            {preview.feed.media.length > 1 && (
+              <>
+                <button
+                  onClick={goPrev}
+                  aria-label="Foto sebelumnya"
+                  style={{
+                    position: "absolute",
+                    left: 8,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    background: "rgba(0,0,0,0.6)",
+                    border: "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                  }}
+                >
+                  <ChevronLeft size={22} />
+                </button>
+                <button
+                  onClick={goNext}
+                  aria-label="Foto berikutnya"
+                  style={{
+                    position: "absolute",
+                    right: 8,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    background: "rgba(0,0,0,0.6)",
+                    border: "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                  }}
+                >
+                  <ChevronRight size={22} />
+                </button>
+                <div
+                  style={{
+                    marginTop: "1rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  {preview.feed.media.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setPreview({ ...preview, index: i })}
+                      style={{
+                        height: 6,
+                        borderRadius: 999,
+                        border: "none",
+                        cursor: "pointer",
+                        background:
+                          i === preview.index
+                            ? "#fff"
+                            : "rgba(255,255,255,0.4)",
+                        width: i === preview.index ? 24 : 8,
+                        transition: "width 0.2s, background 0.2s",
+                      }}
+                    />
+                  ))}
+                  <span
+                    style={{
+                      marginLeft: 8,
+                      fontSize: "0.75rem",
+                      color: "rgba(255,255,255,0.6)",
+                    }}
                   >
-                    <ChevronLeft size={24} />
-                  </button>
-                  <button
-                    onClick={goNext}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white hover:bg-[#4A7C59] transition"
-                    aria-label="Foto berikutnya"
-                  >
-                    <ChevronRight size={24} />
-                  </button>
-
-                  {/* Indicator */}
-                  <div className="mt-4 flex items-center gap-2 text-sm text-white/80">
-                    {preview.feed.media.map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setPreview({ ...preview, index: i })}
-                        className={`h-1.5 rounded-full transition-all ${i === preview.index ? "w-6 bg-white" : "w-2 bg-white/50 hover:bg-white/70"}`}
-                      />
-                    ))}
-                    <span className="ml-3 tabular-nums">
-                      {preview.index + 1} / {preview.feed.media.length}
-                    </span>
-                  </div>
-                </>
-              )}
-
-              {/* Optional subtle info bar */}
-              <div className="mt-3 text-center text-xs text-white/60">
-                {preview.feed.user_name} •{" "}
-                {new Date(preview.feed.created_at).toLocaleDateString("id-ID", {
-                  day: "numeric",
-                  month: "short",
-                })}
-              </div>
+                    {preview.index + 1} / {preview.feed.media.length}
+                  </span>
+                </div>
+              </>
+            )}
+            <div
+              style={{
+                marginTop: "0.75rem",
+                fontSize: "0.75rem",
+                color: "rgba(255,255,255,0.5)",
+                textAlign: "center",
+              }}
+            >
+              {preview.feed.user_name} ·{" "}
+              {new Date(preview.feed.created_at).toLocaleDateString("id-ID", {
+                day: "numeric",
+                month: "short",
+              })}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

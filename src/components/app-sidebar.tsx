@@ -2,7 +2,6 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import {
   Home,
   Heart,
@@ -11,7 +10,6 @@ import {
   MessageCircle,
   Settings,
   LogOut,
-  Shield,
   Menu,
   X,
   Users,
@@ -20,24 +18,32 @@ import {
   Search,
   UserPlus,
   CheckSquare,
+  Bell,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api-client";
 
+type NavItem =
+  | { href: string; icon: React.ElementType; label: string; hasSubmenu?: false }
+  | { href: string; icon: React.ElementType; label: string; hasSubmenu: true };
+
 export function AppSidebar({ children }: { children: React.ReactNode }) {
   const [hasSpouse, setHasSpouse] = useState(false);
-
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
   const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
-  const [circleFamilyExpanded, setCircleFamilyExpanded] = useState(pathname?.startsWith("/circle-family"));
+  const [circleFamilyExpanded, setCircleFamilyExpanded] = useState(
+    pathname?.startsWith("/circle-family") ?? false,
+  );
   const [hasHalaqahInvitation, setHasHalaqahInvitation] = useState(false);
   const [hasJoinRequests, setHasJoinRequests] = useState(false);
 
+  // Auth gate
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (
@@ -51,180 +57,196 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, router]);
 
+  // Taaruf check
   useEffect(() => {
     fetch("/api/taaruf")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setHasSpouse(data?.has_spouse || false));
   }, []);
 
+  // Unread chat
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const res = await apiFetch("/api/chat/rooms");
+        if (!res.ok) return;
+        const rooms: { unread_count?: number }[] = await res.json();
+        setHasUnreadChat(rooms.some((r) => (r.unread_count || 0) > 0));
+      } catch {
+        /* silent */
+      }
+    };
+    fetchUnread();
+  }, []);
+
+  // Pending invitations
+  useEffect(() => {
+    const fetchPending = async () => {
+      try {
+        const res = await apiFetch("/api/invitations?status=pending");
+        if (!res.ok) return;
+        const data = await res.json();
+        setHasPendingInvitation((data.invitations || []).length > 0);
+      } catch {
+        /* silent */
+      }
+    };
+    fetchPending();
+    const handler = () => fetchPending();
+    window.addEventListener("invitations-updated", handler);
+    return () => window.removeEventListener("invitations-updated", handler);
+  }, []);
+
+  // Halaqah invitations
+  useEffect(() => {
+    const fetch_ = async () => {
+      try {
+        const res = await apiFetch(
+          "/api/circle-family/invitations?status=pending",
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        setHasHalaqahInvitation((data.invitations || []).length > 0);
+      } catch {
+        /* silent */
+      }
+    };
+    fetch_();
+    const h = () => fetch_();
+    window.addEventListener("halaqah-invitations-updated", h);
+    return () => window.removeEventListener("halaqah-invitations-updated", h);
+  }, []);
+
+  // Join requests
+  useEffect(() => {
+    const fetch_ = async () => {
+      try {
+        const res = await apiFetch(
+          "/api/circle-family/requests?status=pending",
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        setHasJoinRequests((data.requests || []).length > 0);
+      } catch {
+        /* silent */
+      }
+    };
+    fetch_();
+    const h = () => fetch_();
+    window.addEventListener("halaqah-requests-updated", h);
+    return () => window.removeEventListener("halaqah-requests-updated", h);
+  }, []);
+
+  // ── routing guards ──────────────────────────────
   const isAuthPage =
     pathname?.startsWith("/auth") ||
     pathname === "/" ||
     pathname === "/invitations";
 
-  if (isAuthPage) {
-    return children;
-  }
-
-  const taarufItem = !hasSpouse ? { href: "/taaruf", icon: Heart, label: "Ta'aruf" } : null;
-  const navItems = [
-    { href: "/feeds", icon: Home, label: "Family Feed" },
-    { href: "/tree", icon: Network, label: "Family Tree" },
-    ...(taarufItem ? [taarufItem] : []),
-    { href: "/circle-family", icon: Users, label: "Circle Family", hasSubmenu: true },
-    { href: "/documents", icon: FileText, label: "Family Vault" },
-    { href: "/chat", icon: MessageCircle, label: "Messages" },
-    { href: "/settings", icon: Settings, label: "Settings" },
-  ];
+  if (isAuthPage) return <>{children}</>;
 
   const isChat = pathname?.startsWith("/chat");
 
-  useEffect(() => {
-    const fetchUnreadStatus = async () => {
-      try {
-        const res = await apiFetch("/api/chat/rooms");
-        if (!res.ok) return;
-
-        const rooms: any[] = await res.json();
-        const hasAnyUnread = rooms.some((r) => (r.unread_count || 0) > 0);
-        setHasUnreadChat(hasAnyUnread);
-      } catch {
-      }
-    };
-
-    fetchUnreadStatus();
-  }, []);
-
-  useEffect(() => {
-    const fetchPendingInvitations = async () => {
-      try {
-        const res = await apiFetch("/api/invitations?status=pending");
-        if (!res.ok) return;
-
-        const data = await res.json();
-        setHasPendingInvitation((data.invitations || []).length > 0);
-      } catch {
-      }
-    };
-
-    fetchPendingInvitations();
-
-    const handler = () => fetchPendingInvitations();
-    window.addEventListener("invitations-updated", handler);
-
-    return () => {
-      window.removeEventListener("invitations-updated", handler);
-    };
-  }, []);
-
-  useEffect(() => {
-    const fetchHalaqahInvitations = async () => {
-      try {
-        const res = await apiFetch("/api/circle-family/invitations?status=pending");
-        if (!res.ok) return;
-
-        const data = await res.json();
-        setHasHalaqahInvitation((data.invitations || []).length > 0);
-      } catch {
-      }
-    };
-
-    fetchHalaqahInvitations();
-
-    const handler = () => fetchHalaqahInvitations();
-    window.addEventListener("halaqah-invitations-updated", handler);
-
-    return () => {
-      window.removeEventListener("halaqah-invitations-updated", handler);
-    };
-  }, []);
-
-  useEffect(() => {
-    const fetchJoinRequests = async () => {
-      try {
-        const res = await apiFetch("/api/circle-family/requests?status=pending");
-        if (!res.ok) return;
-
-        const data = await res.json();
-        setHasJoinRequests((data.requests || []).length > 0);
-      } catch {
-      }
-    };
-
-    fetchJoinRequests();
-
-    const handler = () => fetchJoinRequests();
-    window.addEventListener("halaqah-requests-updated", handler);
-
-    return () => {
-      window.removeEventListener("halaqah-requests-updated", handler);
-    };
-  }, []);
-
-  const isCircleFamilyPage = pathname?.startsWith("/circle-family");
-  const isDiscoverSkillPage = pathname?.startsWith("/circle-family/discover/skill");
-  const isCircleFamilyInvitationPage = pathname?.startsWith("/invitations/circle-family");
-
-  const circleFamilySubItems = [
-    { href: "/circle-family/discover/skill", icon: Search, label: "Cari Keluarga" },
-    { href: "/circle-family", icon: Users, label: "Grup Saya" },
-    { href: "/circle-family/requests", icon: CheckSquare, label: "Permintaan Bergabung" },
-    { href: "/invitations/circle-family", icon: UserPlus, label: "Undangan Masuk" },
+  // ── nav items ───────────────────────────────────
+  const navItems: NavItem[] = [
+    { href: "/feeds", icon: Home, label: "Family Feed" },
+    { href: "/tree", icon: Network, label: "Family Tree" },
+    ...(!hasSpouse
+      ? [{ href: "/taaruf", icon: Heart, label: "Ta'aruf" } as NavItem]
+      : []),
+    {
+      href: "/circle-family",
+      icon: Users,
+      label: "Circle Family",
+      hasSubmenu: true,
+    },
+    { href: "/documents", icon: FileText, label: "Family Vault" },
+    { href: "/chat", icon: MessageCircle, label: "Messages" },
+    { href: "/notifications", icon: Bell, label: "Notifikasi" },
+    { href: "/settings", icon: Settings, label: "Pengaturan" },
   ];
 
+  const circleFamilySubItems = [
+    {
+      href: "/circle-family/discover/skill",
+      icon: Search,
+      label: "Cari Keluarga",
+    },
+    { href: "/circle-family", icon: Users, label: "Grup Saya" },
+    { href: "/circle-family/requests", icon: CheckSquare, label: "Permintaan" },
+    {
+      href: "/invitations/circle-family",
+      icon: UserPlus,
+      label: "Undangan Masuk",
+    },
+  ];
+
+  const isCircleFamilyPage =
+    pathname?.startsWith("/circle-family") ||
+    pathname?.startsWith("/invitations/circle-family");
+
+  // ── helpers ─────────────────────────────────────
+  const userInitial = user?.full_name?.[0]?.toUpperCase() || "U";
+  const userName = user?.full_name?.split(" ")[0] || "User";
+
   const renderNavItems = () => (
-    <div className="space-y-1">
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {navItems.map((item) => {
-        if (item.hasSubmenu) {
-          const isParentActive = isCircleFamilyPage || isDiscoverSkillPage || isCircleFamilyInvitationPage;
+        if ("hasSubmenu" in item && item.hasSubmenu) {
+          const isActive = isCircleFamilyPage;
           return (
             <div key={item.href}>
               <button
                 onClick={() => setCircleFamilyExpanded(!circleFamilyExpanded)}
-                className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
-                  isParentActive
-                    ? "bg-[#D6EAD9] text-[#2E5239]"
-                    : "text-[#6B5B45] hover:bg-[#D6EAD9] hover:text-[#2E5239]"
-                }`}
+                className="ck-sidebar-item"
+                data-active={isActive ? "true" : undefined}
+                aria-expanded={circleFamilyExpanded}
+                style={{
+                  width: "100%",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
               >
-                <div className="flex items-center gap-3">
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-                </div>
-                <div className="flex items-center">
-                  {(hasHalaqahInvitation || hasJoinRequests) && (
-                    <span className="h-2 w-2 rounded-full bg-red-500 mr-2" />
-                  )}
-                  {circleFamilyExpanded ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </div
->
+                <item.icon size={17} />
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {(hasHalaqahInvitation || hasJoinRequests) && (
+                  <span className="ck-sidebar-dot" />
+                )}
+                {circleFamilyExpanded ? (
+                  <ChevronDown size={14} style={{ opacity: 0.5 }} />
+                ) : (
+                  <ChevronRight size={14} style={{ opacity: 0.5 }} />
+                )}
               </button>
 
               {circleFamilyExpanded && (
-                <div className="ml-6 mt-1 space-y-1">
-                  {circleFamilySubItems.map((subItem) => (
+                <div
+                  style={{
+                    paddingLeft: "1.625rem",
+                    marginTop: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 2,
+                  }}
+                >
+                  {circleFamilySubItems.map((sub) => (
                     <Link
-                      key={subItem.href}
-                      href={subItem.href}
+                      key={sub.href}
+                      href={sub.href}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 text-sm rounded-lg font-medium transition-all ${
-                        pathname === subItem.href
-                          ? "bg-[#EDE4D3] text-[#3B2F1E]"
-                          : "text-[#6B5B45] hover:bg-[#EDE4D3] hover:text-[#3B2F1E]"
-                      }`}
+                      className="ck-sidebar-sub"
+                      data-active={pathname === sub.href ? "true" : undefined}
                     >
-                      <subItem.icon className="h-4 w-4" />
-                      {subItem.label}
-                      {subItem.href === "/invitations/circle-family" && hasHalaqahInvitation && (
-                        <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
-                      )}
-                      {subItem.href === "/circle-family/requests" && hasJoinRequests && (
-                        <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
-                      )}
+                      <sub.icon size={14} />
+                      <span style={{ flex: 1 }}>{sub.label}</span>
+                      {sub.href === "/invitations/circle-family" &&
+                        hasHalaqahInvitation && (
+                          <span className="ck-sidebar-dot" />
+                        )}
+                      {sub.href === "/circle-family/requests" &&
+                        hasJoinRequests && <span className="ck-sidebar-dot" />}
                     </Link>
                   ))}
                 </div>
@@ -233,26 +255,22 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
           );
         }
 
+        const isActive = pathname === item.href;
         return (
           <Link
             key={item.href}
             href={item.href}
             onClick={() => setMobileMenuOpen(false)}
-            className={`flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg font-medium transition-all ${
-              pathname === item.href
-                ? "bg-[#D6EAD9] text-[#2E5239]"
-                : "text-[#6B5B45] hover:bg-[#D6EAD9] hover:text-[#2E5239]"
-            }`}
+            className="ck-sidebar-item"
+            data-active={isActive ? "true" : undefined}
           >
-            <item.icon className="h-5 w-5" />
-            {item.label}
-
+            <item.icon size={17} />
+            <span style={{ flex: 1 }}>{item.label}</span>
             {item.href === "/chat" && hasUnreadChat && (
-              <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+              <span className="ck-sidebar-dot" />
             )}
-
             {item.href === "/tree" && hasPendingInvitation && (
-              <span className="ml-auto h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+              <span className="ck-sidebar-dot" />
             )}
           </Link>
         );
@@ -261,85 +279,336 @@ export function AppSidebar({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="h-screen flex flex-col bg-[#F5F0E8] overflow-hidden">
-      <header className="bg-[#FDFAF5] border-b border-[#D4C4A8] flex-shrink-0 z-10">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Link href="/feeds" className="flex items-center space-x-2">
-              <img
-                src="/images/logo-cerita-keluarga.png"
-                alt="logo"
-                className="mx-auto my-4 w-20 h-20 object-contain"
-              />
-              <span className="font-bold text-2xl text-[#3B2F1E]">
-                Cerita Keluarga
-              </span>
-            </Link>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={logout}
-              className="text-[#6B5B45] hover:bg-[#EDE4D3] transition-colors"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Logout</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
+    <>
+      {/* ───── Sidebar CSS ───── */}
+      <style>{`
+        .ck-dash-layout {
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          background: var(--ck-dash-bg);
+          overflow: hidden;
+          font-family: var(--font-body);
+        }
+
+        /* Top bar */
+        .ck-topbar {
+          height: 56px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 1.25rem;
+          background: var(--ck-dash-card);
+          border-bottom: 1px solid var(--ck-dash-border);
+          flex-shrink: 0;
+          z-index: 50;
+        }
+        .ck-topbar-brand {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          text-decoration: none;
+        }
+        .ck-topbar-brand-logo {
+          width: 28px;
+          height: 28px;
+          object-fit: contain;
+          border-radius: 6px;
+        }
+        .ck-topbar-brand-name {
+          font-family: var(--font-display);
+          font-size: 1.0625rem;
+          font-weight: 600;
+          color: var(--ck-dash-text1);
+          letter-spacing: 0.01em;
+        }
+        .ck-topbar-right {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .ck-topbar-btn {
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          color: var(--ck-dash-text2);
+          transition: background 0.15s;
+        }
+        .ck-topbar-btn:hover { background: var(--ck-dash-surface); }
+
+        /* Body row */
+        .ck-body-row {
+          display: flex;
+          flex: 1;
+          min-height: 0;
+        }
+
+        /* Sidebar */
+        .ck-sidebar {
+          width: 220px;
+          flex-shrink: 0;
+          background: var(--ck-dash-card);
+          border-right: 1px solid var(--ck-dash-border);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        @media (max-width: 768px) {
+          .ck-sidebar { display: none; }
+          .ck-sidebar.mobile-open {
+            display: flex;
+            position: fixed;
+            inset: 0;
+            width: 240px;
+            z-index: 60;
+            box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+          }
+        }
+        .ck-sidebar-nav {
+          flex: 1;
+          overflow-y: auto;
+          padding: 1rem 0.75rem;
+          scrollbar-width: none;
+        }
+        .ck-sidebar-nav::-webkit-scrollbar { display: none; }
+
+        /* Section label */
+        .ck-sidebar-section-label {
+          font-size: 0.625rem;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--ck-dash-text3);
+          padding: 0.875rem 0.5rem 0.375rem;
+        }
+
+        /* Nav item */
+        .ck-sidebar-item {
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+          padding: 0.5625rem 0.75rem;
+          border-radius: 8px;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--ck-dash-text2);
+          text-decoration: none;
+          transition: background 0.15s, color 0.15s;
+          position: relative;
+        }
+        .ck-sidebar-item:hover {
+          background: var(--ck-dash-surface);
+          color: var(--ck-dash-text1);
+        }
+        .ck-sidebar-item[data-active="true"] {
+          background: var(--ck-dash-green-lt);
+          color: var(--ck-dash-green-dk);
+          font-weight: 600;
+        }
+        .ck-sidebar-item[data-active="true"]::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 20%;
+          height: 60%;
+          width: 3px;
+          border-radius: 0 3px 3px 0;
+          background: var(--ck-dash-green);
+        }
+
+        /* Sub item */
+        .ck-sidebar-sub {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.4375rem 0.625rem;
+          border-radius: 6px;
+          font-size: 0.75rem;
+          font-weight: 500;
+          color: var(--ck-dash-text3);
+          text-decoration: none;
+          transition: background 0.15s, color 0.15s;
+        }
+        .ck-sidebar-sub:hover {
+          background: var(--ck-dash-surface);
+          color: var(--ck-dash-text2);
+        }
+        .ck-sidebar-sub[data-active="true"] {
+          background: rgba(74,124,89,0.08);
+          color: var(--ck-dash-green);
+          font-weight: 600;
+        }
+
+        /* Dot badge */
+        .ck-sidebar-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #E05252;
+          flex-shrink: 0;
+        }
+
+        /* Sidebar footer */
+        .ck-sidebar-footer {
+          padding: 0.875rem 0.875rem;
+          border-top: 1px solid var(--ck-dash-border);
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+        }
+        .ck-sidebar-avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: var(--ck-dash-green-lt);
+          color: var(--ck-dash-green-dk);
+          font-size: 0.8125rem;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          overflow: hidden;
+        }
+        .ck-sidebar-username {
+          font-size: 0.8125rem;
+          font-weight: 600;
+          color: var(--ck-dash-text1);
+          flex: 1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .ck-sidebar-logout {
+          width: 28px;
+          height: 28px;
+          border-radius: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          color: var(--ck-dash-text3);
+          transition: background 0.15s, color 0.15s;
+          flex-shrink: 0;
+        }
+        .ck-sidebar-logout:hover {
+          background: #FDEAEA;
+          color: #C0392B;
+        }
+
+        /* Main */
+        .ck-main {
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+
+        /* Mobile overlay */
+        .ck-mobile-overlay {
+          display: none;
+          position: fixed;
+          inset: 0;
+          z-index: 55;
+          background: rgba(0,0,0,0.45);
+        }
+        @media (max-width: 768px) {
+          .ck-mobile-overlay.open { display: block; }
+        }
+      `}</style>
+
+      <div className="ck-dash-layout">
+        {/* ── Top bar ── */}
+        <header className="ck-topbar">
+          <Link href="/feeds" className="ck-topbar-brand">
+            <img
+              src="/images/logo-cerita-keluarga.png"
+              alt="Cerita Keluarga"
+              className="ck-topbar-brand-logo"
+            />
+            <span className="ck-topbar-brand-name">Cerita Keluarga</span>
+          </Link>
+
+          <div className="ck-topbar-right">
+            {/* Mobile hamburger */}
+            <button
+              className="ck-topbar-btn"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden text-[#6B5B45] hover:bg-[#EDE4D3] transition-colors"
+              aria-label="Toggle menu"
+              style={{ display: "none" }}
+              // inline style show on mobile via CSS is tricky; use className trick below
             >
-              {mobileMenuOpen ? (
-                <X className="h-4 w-4" />
-              ) : (
-                <Menu className="h-4 w-4" />
-              )}
-            </Button>
+              {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+
+            {/* Hamburger visible only on mobile — override via media query */}
+            <style>{`
+              @media (max-width: 768px) {
+                .ck-mobile-hamburger { display: flex !important; }
+              }
+            `}</style>
+            <button
+              className="ck-topbar-btn ck-mobile-hamburger"
+              style={{ display: "none" }}
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
           </div>
+        </header>
+
+        {/* ── Body ── */}
+        <div className="ck-body-row">
+          {/* Mobile overlay */}
+          <div
+            className={`ck-mobile-overlay${mobileMenuOpen ? " open" : ""}`}
+            onClick={() => setMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* ── Sidebar ── */}
+          <aside
+            className={`ck-sidebar${mobileMenuOpen ? " mobile-open" : ""}`}
+          >
+            <nav className="ck-sidebar-nav" aria-label="Navigasi utama">
+              <p className="ck-sidebar-section-label">Menu</p>
+              {renderNavItems()}
+            </nav>
+
+            {/* Footer: user + logout */}
+            <div className="ck-sidebar-footer">
+              <div className="ck-sidebar-avatar">{userInitial}</div>
+              <span className="ck-sidebar-username">{userName}</span>
+              <button
+                className="ck-sidebar-logout"
+                onClick={logout}
+                title="Keluar"
+                aria-label="Keluar dari akun"
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          </aside>
+
+          {/* ── Main content ── */}
+          <main
+            className="ck-main"
+            style={isChat ? {} : { padding: "1.5rem", overflowY: "auto" }}
+          >
+            {children}
+          </main>
         </div>
-      </header>
-
-      <div
-        className={[
-          "flex flex-1 min-h-0 container mx-auto w-full",
-          isChat ? "p-0 gap-0" : "px-4 py-6 gap-6",
-        ].join(" ")}
-      >
-        <nav
-          className={[
-            "w-56 flex-shrink-0 md:block transition-all duration-300",
-            mobileMenuOpen ? "block" : "hidden",
-            isChat ? "px-4 py-6" : "",
-          ].join(" ")}
-        >
-          <div className="bg-[#FDFAF5] rounded-xl border border-[#D4C4A8] p-4 shadow-sm">
-            {renderNavItems()}
-          </div>
-        </nav>
-
-        <nav
-          className={`fixed inset-0 z-40 bg-black bg-opacity-50 transition-opacity duration-300 md:hidden ${
-            mobileMenuOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-          }`}
-          onClick={() => setMobileMenuOpen(false)}
-        >
-          <div className="absolute left-0 top-0 h-full w-56 bg-[#FDFAF5] border-r border-[#D4C4A8] p-4">
-            {renderNavItems()}
-          </div>
-        </nav>
-
-        <main
-          className={[
-            "flex-1 min-h-0 overflow-hidden flex flex-col",
-            isChat ? "" : "py-0",
-          ].join(" ")}
-        >
-          {children}
-        </main>
       </div>
-    </div>
+    </>
   );
 }
