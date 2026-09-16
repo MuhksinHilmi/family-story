@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -14,7 +15,7 @@ import {
 import { OtpInput } from "@/components/ui/otp-input";
 import { rootStyles } from "@/components/ui/design-system";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -69,9 +70,8 @@ export default function LoginPage() {
       if (response.ok) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
-        const next = searchParams.get('next') || '/feeds';
-        // decode next if it was encoded earlier
-        const destination = next ? decodeURIComponent(next) : '/feeds';
+        const next = searchParams.get("next") || "/feeds";
+        const destination = next ? decodeURIComponent(next) : "/feeds";
         window.location.href = destination;
       } else {
         setError(data.error || "OTP salah");
@@ -114,90 +114,105 @@ export default function LoginPage() {
   };
 
   return (
+    <Card className="w-full max-w-md lp-card">
+      {step === "email" ? (
+        <>
+          <CardHeader className="card-header">
+            <CardTitle>Masuk</CardTitle>
+            <CardDescription>
+              Masukkan email untuk menerima kode OTP
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSendOtp} className="space-y-4">
+              <div>
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="flex h-10 w-full rounded-md border border-[#D4C4A8] bg-[#EDE4D3] px-3 py-2 text-base text-[#3B2F1E] ring-offset-white placeholder:text-[#9C8B75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Mengirim..." : "Kirim Kode OTP"}
+              </Button>
+              <div className="mt-4 text-center">
+                <Link
+                  href="/auth/register"
+                  className="text-sm text-[#4A7C59] hover:underline"
+                >
+                  Belum punya akun? Daftar di sini
+                </Link>
+              </div>
+            </form>
+          </CardContent>
+        </>
+      ) : (
+        <>
+          <CardHeader className="card-header">
+            <CardTitle>Masukkan Kode OTP</CardTitle>
+            <CardDescription>Kode OTP telah dikirim ke {email}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <OtpInput
+                value={otp}
+                onChange={setOtp}
+                onComplete={handleVerifyOtpComplete}
+                disabled={isLoading}
+              />
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={countdown > 0 || isLoading}
+                  className="text-sm text-[#4A7C59] hover:underline disabled:opacity-50"
+                >
+                  {isLoading
+                    ? "Mengirim..."
+                    : countdown > 0
+                      ? `Kirim ulang dalam ${countdown}s`
+                      : "Kirim ulang kode OTP"}
+                </button>
+              </div>
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => setStep("email")}
+                  className="text-sm text-[#9C8B75] hover:underline"
+                >
+                  Gunakan email lain
+                </button>
+              </div>
+            </form>
+          </CardContent>
+        </>
+      )}
+    </Card>
+  );
+}
+
+export default function LoginPage() {
+  return (
     <>
       <style>{rootStyles}</style>
       <div className="min-h-screen flex items-center justify-center">
-        <Card className="w-full max-w-md lp-card">
-          {step === "email" ? (
-            <>
+        <Suspense
+          fallback={
+            <Card className="w-full max-w-md lp-card">
               <CardHeader className="card-header">
                 <CardTitle>Masuk</CardTitle>
-                <CardDescription>
-                  Masukkan email untuk menerima kode OTP
-                </CardDescription>
+                <CardDescription>Memuat...</CardDescription>
               </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSendOtp} className="space-y-4">
-                  <div>
-                    <input
-                      type="email"
-                      placeholder="Email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="flex h-10 w-full rounded-md border border-[#D4C4A8] bg-[#EDE4D3] px-3 py-2 text-base text-[#3B2F1E] ring-offset-white placeholder:text-[#9C8B75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    />
-                  </div>
-                  {error && <p className="text-red-500 text-sm">{error}</p>}
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Mengirim..." : "Kirim Kode OTP"}
-                  </Button>
-                  <div className="mt-4 text-center">
-                    <Link
-                      href="/auth/register"
-                      className="text-sm text-[#4A7C59] hover:underline"
-                    >
-                      Belum punya akun? Daftar di sini
-                    </Link>
-                  </div>
-                </form>
-              </CardContent>
-            </>
-          ) : (
-            <>
-              <CardHeader className="card-header">
-                <CardTitle>Masukkan Kode OTP</CardTitle>
-                <CardDescription>
-                  Kode OTP telah dikirim ke {email}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  {error && <p className="text-red-500 text-sm">{error}</p>}
-                  <OtpInput
-                    value={otp}
-                    onChange={setOtp}
-                    onComplete={handleVerifyOtpComplete}
-                    disabled={isLoading}
-                  />
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={handleResendOtp}
-                      disabled={countdown > 0 || isLoading}
-                      className="text-sm text-[#4A7C59] hover:underline disabled:opacity-50"
-                    >
-                      {isLoading
-                        ? "Mengirim..."
-                        : countdown > 0
-                          ? `Kirim ulang dalam ${countdown}s`
-                          : "Kirim ulang kode OTP"}
-                    </button>
-                  </div>
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={() => setStep("email")}
-                      className="text-sm text-[#9C8B75] hover:underline"
-                    >
-                      Gunakan email lain
-                    </button>
-                  </div>
-                </form>
-              </CardContent>
-            </>
-          )}
-        </Card>
+            </Card>
+          }
+        >
+          <LoginForm />
+        </Suspense>
       </div>
     </>
   );

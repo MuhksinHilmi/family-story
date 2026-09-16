@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -19,8 +19,8 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api-client";
-import dynamic from "next/dynamic";
-const FocusedFeedModal = dynamic(() => import("./FocusedFeedModal"), {
+import nextDynamic from "next/dynamic";
+const FocusedFeedModal = nextDynamic(() => import("./FocusedFeedModal"), {
   ssr: false,
 });
 import { renderWithMentions } from "@/lib/mentions";
@@ -58,7 +58,7 @@ interface CommentItem {
   created_at: string;
 }
 
-export default function FeedsPage() {
+function FeedsPageContent() {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1403,5 +1403,19 @@ export default function FeedsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function FeedsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-[#9C8B75]">
+          Memuat...
+        </div>
+      }
+    >
+      <FeedsPageContent />
+    </Suspense>
   );
 }

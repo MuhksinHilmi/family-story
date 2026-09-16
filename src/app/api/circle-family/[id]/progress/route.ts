@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db_helper';
 import { requireAuth } from '@/lib/auth';
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAuth(request);
     if (auth.error) return auth.error;
 
-    const halaqahId = params.id;
+    const { id: halaqahId } = await params;
     const body = await request.json();
     const { step_id, nuclear_family_id, is_completed } = body;
 

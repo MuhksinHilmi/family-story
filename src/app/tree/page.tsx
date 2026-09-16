@@ -1,7 +1,14 @@
 "use client";
 
-import { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { useSearchParams, useRouter } from 'next/navigation';
+import {
+  useCallback,
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  Suspense,
+} from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   ReactFlow,
   Node,
@@ -28,11 +35,11 @@ import { useFamilyTree } from "./hooks/useFamilyTree";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch } from "@/lib/api-client";
 
-export default function TreePage() {
+function TreePageContent() {
   const { user, isLoading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const focusName = searchParams.get('focus_name') || null;
+  const focusName = searchParams.get("focus_name") || null;
   const [firstSelectedNodeId, setFirstSelectedNodeId] = useState<string | null>(
     null,
   );
@@ -46,9 +53,15 @@ export default function TreePage() {
 
   // Break relationship modal state
   const [breakModalNodeId, setBreakModalNodeId] = useState<string | null>(null);
-  const [breakModalRelatedNodeId, setBreakModalRelatedNodeId] = useState<string | null>(null);
-  const [breakModalRelatedNodeName, setBreakModalRelatedNodeName] = useState<string | null>(null);
-  const [breakModalRelationshipType, setBreakModalRelationshipType] = useState<'spouse' | 'father' | 'mother' | 'child' | null>(null);
+  const [breakModalRelatedNodeId, setBreakModalRelatedNodeId] = useState<
+    string | null
+  >(null);
+  const [breakModalRelatedNodeName, setBreakModalRelatedNodeName] = useState<
+    string | null
+  >(null);
+  const [breakModalRelationshipType, setBreakModalRelationshipType] = useState<
+    "spouse" | "father" | "mother" | "child" | null
+  >(null);
   const [isBreakModalOpen, setIsBreakModalOpen] = useState(false);
 
   // Loading state for "Undang User Baru" (email invite)
@@ -92,7 +105,7 @@ export default function TreePage() {
 
   const nodesWithMoreRelations = useMemo(
     () => getNodesWithMoreRelations(),
-    [getNodesWithMoreRelations, nodes.length]
+    [getNodesWithMoreRelations, nodes.length],
   );
 
   // Client-side nasab fallback (hanya untuk node yang belum dapat nasab_line dari server)
@@ -118,9 +131,10 @@ export default function TreePage() {
       }
 
       const fatherFirstName = fatherName.trim().split(/\s+/)[0];
-      const nasab_line = data.gender === 'male' 
-        ? `bin ${fatherFirstName}` 
-        : `binti ${fatherFirstName}`;
+      const nasab_line =
+        data.gender === "male"
+          ? `bin ${fatherFirstName}`
+          : `binti ${fatherFirstName}`;
 
       return {
         ...node,
@@ -150,10 +164,14 @@ export default function TreePage() {
 
     const name = decodeURIComponent(focusName).toLowerCase();
     // try find exact match first
-    let target = nodes.find((n) => (n.data.full_name || '').toLowerCase() === name);
+    let target = nodes.find(
+      (n) => (n.data.full_name || "").toLowerCase() === name,
+    );
     if (!target) {
       // partial match
-      target = nodes.find((n) => (n.data.full_name || '').toLowerCase().includes(name));
+      target = nodes.find((n) =>
+        (n.data.full_name || "").toLowerCase().includes(name),
+      );
     }
 
     if (target && reactFlowInstance) {
@@ -165,7 +183,7 @@ export default function TreePage() {
 
       // remove query param to avoid repeated focus on reload
       const url = new URL(window.location.href);
-      url.searchParams.delete('focus_name');
+      url.searchParams.delete("focus_name");
       router.replace(url.pathname + url.search, { scroll: false });
     }
   }, [focusName, nodes, reactFlowInstance]);
@@ -184,7 +202,11 @@ export default function TreePage() {
       // First auto extended load: up to 3 groups, max 30 nodes total
       loadFromUserExtendedGroups(3, undefined, 30);
     }
-  }, [currentUserNodeUuid, currentUserExtendedGroups, loadFromUserExtendedGroups]);
+  }, [
+    currentUserNodeUuid,
+    currentUserExtendedGroups,
+    loadFromUserExtendedGroups,
+  ]);
 
   // Client-side sync: always use the latest photo from the logged-in user's profile
   // for their own node in the tree (so avatar updates immediately after profile change)
@@ -220,9 +242,10 @@ export default function TreePage() {
 
   // Phase 5: Center view on the logged-in user's own node after load
   useEffect(() => {
-    if (!currentUserNodeUuid || nodes.length === 0 || !reactFlowInstance) return;
+    if (!currentUserNodeUuid || nodes.length === 0 || !reactFlowInstance)
+      return;
 
-    const userNode = nodes.find(n => n.id === currentUserNodeUuid);
+    const userNode = nodes.find((n) => n.id === currentUserNodeUuid);
     if (!userNode) return;
 
     // Gunakan setCenter agar lebih halus dan fokus ke node user
@@ -255,60 +278,70 @@ export default function TreePage() {
   }, []);
 
   // === Fase 4: Reload relasi tambahan dari node tertentu ===
-  const handleReload = useCallback(async (nodeId: string) => {
-    setReloadingNodeId(nodeId);
+  const handleReload = useCallback(
+    async (nodeId: string) => {
+      setReloadingNodeId(nodeId);
 
-    try {
-      const currentNodeIds = nodes.map((n) => n.id);
+      try {
+        const currentNodeIds = nodes.map((n) => n.id);
 
-      const res = await apiFetch("/api/tree/related", {
-        method: "POST",
-        body: JSON.stringify({
-          node_ids: [nodeId],
-          exclude_node_ids: currentNodeIds,
-          limit: 30,
-        }),
-      });
+        const res = await apiFetch("/api/tree/related", {
+          method: "POST",
+          body: JSON.stringify({
+            node_ids: [nodeId],
+            exclude_node_ids: currentNodeIds,
+            limit: 30,
+          }),
+        });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert("Gagal memuat relasi tambahan: " + (err.error || res.status));
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert("Gagal memuat relasi tambahan: " + (err.error || res.status));
+          setReloadingNodeId(null);
+          return;
+        }
+
+        const { nodes: newNodes, relations } = await res.json();
+
+        if (newNodes && newNodes.length > 0) {
+          addRelatedNodes(newNodes, relations || [], nodeId);
+        } else {
+          alert("Tidak ada relasi tambahan yang ditemukan untuk node ini.");
+        }
+      } catch (error) {
+        console.error("Reload node error:", error);
+        alert("Terjadi kesalahan saat memuat relasi tambahan.");
+      } finally {
         setReloadingNodeId(null);
+      }
+    },
+    [nodes, addRelatedNodes],
+  );
+
+  // === Handle break button click - open modal to select reason ===
+  const handleBreakClick = useCallback(
+    (
+      nodeId: string,
+      relatedNodeId: string | null,
+      relationshipType: "spouse" | "father" | "mother" | "child" | null,
+    ) => {
+      if (!relatedNodeId || !relationshipType) {
+        alert("Node ini tidak memiliki hubungan yang bisa diputuskan.");
         return;
       }
 
-      const { nodes: newNodes, relations } = await res.json();
+      // Find related node name from nodes
+      const relatedNode = nodes.find((n) => n.id === relatedNodeId);
+      const relatedName = relatedNode?.data?.full_name || "Orang tua";
 
-      if (newNodes && newNodes.length > 0) {
-        addRelatedNodes(newNodes, relations || [], nodeId);
-      } else {
-        alert("Tidak ada relasi tambahan yang ditemukan untuk node ini.");
-      }
-    } catch (error) {
-      console.error("Reload node error:", error);
-      alert("Terjadi kesalahan saat memuat relasi tambahan.");
-    } finally {
-      setReloadingNodeId(null);
-    }
-  }, [nodes, addRelatedNodes]);
-
-  // === Handle break button click - open modal to select reason ===
-  const handleBreakClick = useCallback((nodeId: string, relatedNodeId: string | null, relationshipType: 'spouse' | 'father' | 'mother' | 'child' | null) => {
-    if (!relatedNodeId || !relationshipType) {
-      alert("Node ini tidak memiliki hubungan yang bisa diputuskan.");
-      return;
-    }
-    
-    // Find related node name from nodes
-    const relatedNode = nodes.find(n => n.id === relatedNodeId);
-    const relatedName = relatedNode?.data?.full_name || "Orang tua";
-    
-    setBreakModalNodeId(nodeId);
-    setBreakModalRelatedNodeId(relatedNodeId);
-    setBreakModalRelatedNodeName(relatedName);
-    setBreakModalRelationshipType(relationshipType);
-    setIsBreakModalOpen(true);
-  }, [nodes]);
+      setBreakModalNodeId(nodeId);
+      setBreakModalRelatedNodeId(relatedNodeId);
+      setBreakModalRelatedNodeName(relatedName);
+      setBreakModalRelationshipType(relationshipType);
+      setIsBreakModalOpen(true);
+    },
+    [nodes],
+  );
 
   // Fase 5: Global lazy load (capped)
   const handleGlobalLoadMore = useCallback(async () => {
@@ -342,7 +375,7 @@ export default function TreePage() {
           (node as any).siblings_names = siblings;
         }
 
-// Safety: ensure critical arrays exist on incrementally loaded nodes
+        // Safety: ensure critical arrays exist on incrementally loaded nodes
         node.spouse_ids = node.spouse_ids || [];
         node.children_ids = node.children_ids || [];
         node.father_id = node.father_id ?? null;
@@ -421,7 +454,7 @@ export default function TreePage() {
       }
 
       setIsSendingInvitation(true); // show loading overlay
-      closeModal();                 // close the invite modal immediately
+      closeModal(); // close the invite modal immediately
 
       apiFetch("/api/invitations", {
         method: "POST",
@@ -429,7 +462,9 @@ export default function TreePage() {
           relationship_type: relationshipType,
           invitee_email: email,
           is_share_link: true,
-          ...(relationshipType === "child" && { parent_node_uuid: currentUserNodeUuid }),
+          ...(relationshipType === "child" && {
+            parent_node_uuid: currentUserNodeUuid,
+          }),
         }),
       })
         .then((res) => res.json())
@@ -440,9 +475,11 @@ export default function TreePage() {
             return;
           }
 
-          window.dispatchEvent(new CustomEvent('invitations-updated'));
+          window.dispatchEvent(new CustomEvent("invitations-updated"));
 
-          alert(`Undangan berhasil dikirim ke ${email}.\n\nPenerima akan menerima email berisi link untuk mendaftar dan bergabung.`);
+          alert(
+            `Undangan berhasil dikirim ke ${email}.\n\nPenerima akan menerima email berisi link untuk mendaftar dan bergabung.`,
+          );
 
           setIsSendingInvitation(false); // hide loading after user clicks OK on alert
         })
@@ -499,7 +536,7 @@ export default function TreePage() {
                 disabled={isGlobalLoading}
                 className="text-xs border-[#D4C4A8] text-[#3B2F1E] hover:bg-[#F5F0E8]"
               >
-                {isGlobalLoading ? 'Memuat...' : 'Muat lebih banyak relasi'}
+                {isGlobalLoading ? "Memuat..." : "Muat lebih banyak relasi"}
               </Button>
             </div>
           )}
@@ -533,7 +570,7 @@ export default function TreePage() {
         title="Undang User Baru"
       />
 
-<NodeDetailModal
+      <NodeDetailModal
         open={isDetailOpen}
         onClose={() => {
           setIsDetailOpen(false);
@@ -603,7 +640,9 @@ export default function TreePage() {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
           <div className="bg-white rounded-2xl px-8 py-7 shadow-xl flex flex-col items-center gap-3 min-w-[260px]">
             <div className="w-8 h-8 border-4 border-[#4A7C59] border-t-transparent rounded-full animate-spin" />
-            <p className="text-[#3B2F1E] font-medium text-base">Mengirim undangan...</p>
+            <p className="text-[#3B2F1E] font-medium text-base">
+              Mengirim undangan...
+            </p>
             <p className="text-sm text-[#6B5F4D] text-center">
               Mohon tunggu sebentar
             </p>
@@ -611,5 +650,19 @@ export default function TreePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TreePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-gray-400">
+          Memuat pohon keluarga...
+        </div>
+      }
+    >
+      <TreePageContent />
+    </Suspense>
   );
 }
