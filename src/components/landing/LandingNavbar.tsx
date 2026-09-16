@@ -28,7 +28,7 @@ export function LandingNavbar() {
           Masuk
         </Link>
         <Link href="/auth/register" className="ck-nav-cta">
-          Mulai Gratis
+          Mulai Ceritamu
         </Link>
       </div>
     </nav>

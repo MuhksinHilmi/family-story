@@ -136,7 +136,7 @@ export function SectionKenangan() {
 
 const BUBBLES = [
   { side: "left",  name: "Nenek",  text: "Jangan lupa sholat Jumat ya, Nak 🤲", delay: "0.2s" },
-  { side: "right", name: "Ayah",   text: "Siap Bu, sudah dalam perjalanan 🕌",   delay: "0.6s" },
+  { side: "left",  name: "Ayah",   text: "Siap Bu, sudah dalam perjalanan 🕌",   delay: "0.6s" },
   { side: "left",  name: "Kakak",  text: "Nanti makan siang di rumah nenek ya semua?", delay: "1.0s" },
   { side: "right", name: "Kamu",   text: "Ayo! Saya bawa es krim 🍦",            delay: "1.4s" },
   { side: "left",  name: "Ibu",    text: "Sudah masak opor dari tadi 😄",         delay: "1.8s" },

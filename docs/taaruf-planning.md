@@ -760,3 +760,137 @@ Jika ada variabel yang sama, GANTI nilainya dengan nilai di atas — jangan dupl
 ---
 
 *Dokumen ini dibuat untuk proyek CeritaKeluarga. Gunakan setiap prompt secara berurutan sesuai sprint yang sudah direncanakan.*
+# PRD — Fitur Konsultasi Konselor Pernikahan
+
+Bagian dari modul Ta'aruf, CeritaKeluarga.
+
+Status dokumen: draf awal — bagian **Skema Database** masih usulan, menunggu konfirmasi terhadap tabel current di project.
+
+---
+
+## 1. Latar belakang & tujuan
+
+Ketika dua profil di modul Ta'aruf menandai status hubungan sebagai **serius** (siap menuju jenjang lebih lanjut), pasangan sering butuh pendampingan psikologis/pernikahan sebelum melangkah lebih jauh. Fitur ini menyediakan jalur konsultasi berbayar dengan konselor pernikahan, dipicu secara halus pada momen status berubah jadi serius.
+
+Catatan konteks (bukan bagian scope produk, sekadar latar): sejak PMA No. 22/2024 & No. 30/2024, Bimbingan Perkawinan (Bimwin) resmi bersifat wajib untuk pendaftaran nikah di KUA. Fitur ini **bukan pengganti** sertifikat Bimwin resmi (kecuali ada kerjasama formal dengan Kemenag/BP4 di fase berikutnya) — posisikan sebagai pendalaman personal, bukan pemenuhan syarat administratif nikah.
+
+## 2. Cakupan (fase 1 — MVP)
+
+**In scope:**
+- 1 konselor dedicated (bukan marketplace)
+- Sesi individu dan sesi berdua (bersama calon pasangan)
+- Booking manual dengan slot jadwal terbatas
+- Pembayaran per sesi (bukan langganan)
+- Trigger soft-nudge saat status koneksi berubah jadi "serius"
+
+**Out of scope (fase berikutnya):**
+- Multi-konselor / marketplace dengan komisi
+- Sertifikasi resmi terintegrasi dengan Kemenag/BP4
+- Paket bundel sesi (3x, 5x, dst)
+- Video call terintegrasi in-app (fase 1 bisa link eksternal — Zoom/Meet)
+
+## 3. User flow
+
+1. Status koneksi antara dua profil Ta'aruf berubah menjadi `serius`.
+2. Sistem menampilkan saran halus (bukan modal wajib) ke kedua user: "Mungkin ini saat yang tepat untuk sesi konsultasi bersama konselor pernikahan."
+3. User (salah satu atau berdua) membuka halaman konselor → lihat profil & kredensial konselor → pilih jenis sesi (individu / berdua) → pilih slot jadwal tersedia.
+4. User melakukan pembayaran sesi.
+5. Setelah pembayaran berhasil, booking berstatus `confirmed`, kedua pihak (untuk sesi berdua) dapat notifikasi jadwal + link pertemuan.
+6. Konselor menandai sesi `completed` setelah selesai (manual, dari sisi admin/konselor).
+7. User bisa memberi rating/feedback singkat pasca sesi (opsional, untuk data kualitas internal — tidak publik ke user lain).
+
+## 4. Business rules
+
+- Sesi individu **tidak memberi tahu pasangan** bahwa sesi itu terjadi — privasi permintaan individu harus terjaga.
+- Slot jadwal terbatas oleh ketersediaan 1 konselor — sistem harus mencegah double-booking di jam yang sama.
+- Pembayaran terjadi di muka (sebelum slot dikunci sebagai `confirmed`); slot yang belum dibayar dilepas otomatis setelah timeout (mis. 15 menit) agar tidak mengunci jadwal tanpa transaksi selesai.
+- Pembatalan: kebijakan refund/reschedule perlu ditentukan terpisah (belum diputuskan — flag untuk didiskusikan).
+- Trigger nudge status "serius" muncul maksimal sekali per minggu per koneksi (hindari terasa memaksa jika user mengabaikannya).
+
+## 5. Kredensial & tampilan profil konselor
+
+Halaman profil konselor menampilkan:
+- Nama & foto
+- Jenis kredensial (mis. psikolog berlisensi / konselor pernikahan bersertifikat / penasihat agama) — **wajib diisi, tidak boleh kosong**
+- Bio singkat & area fokus
+- Gender (relevan untuk preferensi user di sesi individu)
+- Rating agregat (jika sudah ada histori sesi)
+
+## 6. Skema database (usulan — perlu konfirmasi)
+
+> ⚠️ Field & penamaan di bawah ini menyesuaikan pola yang sudah disebutkan sebelumnya di project (mis. `family_uuid`, `userId`). Sesuaikan dengan nama tabel/kolom actual sebelum dieksekusi — terutama nama tabel koneksi/match Ta'aruf yang sudah ada.
+
+### `counselors`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid, PK | |
+| name | text | |
+| photo_url | text | nullable |
+| credential_type | text | enum-like: `psikolog`, `konselor_bersertifikat`, `penasihat_agama`, `lainnya` |
+| bio | text | |
+| gender | text | `male` / `female` |
+| is_active | boolean | default true — untuk nonaktifkan tanpa hapus data |
+| created_at | timestamptz | |
+
+### `counselor_availability`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid, PK | |
+| counselor_id | uuid, FK → counselors.id | |
+| slot_start | timestamptz | |
+| slot_end | timestamptz | |
+| is_booked | boolean | default false |
+
+### `counseling_sessions`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid, PK | |
+| connection_id | uuid, FK → **[tabel koneksi ta'aruf existing — perlu nama sebenarnya]** | penanda pasangan mana |
+| session_type | text | `individual` / `couple` |
+| requested_by_user_id | uuid, FK → users | user yang membuat booking |
+| counselor_id | uuid, FK → counselors.id | |
+| availability_id | uuid, FK → counselor_availability.id | |
+| status | text | `pending_payment`, `confirmed`, `completed`, `cancelled` |
+| meeting_link | text | nullable, diisi manual fase 1 |
+| price | numeric | |
+| created_at | timestamptz | |
+
+### `counseling_payments`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid, PK | |
+| session_id | uuid, FK → counseling_sessions.id | |
+| amount | numeric | |
+| payment_gateway_ref | text | id transaksi dari Midtrans/Xendit/dsb |
+| status | text | `pending`, `paid`, `failed`, `refunded` |
+| paid_at | timestamptz | nullable |
+
+### Perubahan pada tabel existing
+- Tabel koneksi/match Ta'aruf **[nama tabel sebenarnya perlu dikonfirmasi]** perlu memastikan ada field `status` yang mendukung nilai `serius` sebagai salah satu state — ini jadi trigger poin nudge di flow #2.
+
+## 7. API endpoints (usulan)
+
+- `GET /api/counselors` — daftar konselor aktif (fase 1: hanya 1 hasil)
+- `GET /api/counselors/:id/availability` — slot kosong
+- `POST /api/counseling-sessions` — buat booking (status awal `pending_payment`)
+- `POST /api/counseling-sessions/:id/confirm-payment` — webhook/callback dari payment gateway
+- `PATCH /api/counseling-sessions/:id/status` — update status (dipakai admin/konselor untuk mark `completed`/`cancelled`)
+- `GET /api/counseling-sessions?connection_id=` — riwayat sesi untuk satu koneksi (dengan filter privasi individu)
+
+## 8. Privasi & consent
+
+- Sesi individu tidak boleh muncul di riwayat yang bisa dilihat pasangan.
+- Sebelum sesi pertama, tampilkan consent singkat: tujuan sesi, bahwa ini bukan pengganti Bimwin resmi, dan kebijakan kerahasiaan data sesi.
+- Catatan/notes dari sesi (jika ada fitur catatan konselor di fase depan) tidak pernah diekspos ke user lain, termasuk pasangan.
+
+## 9. Risiko & hal yang belum diputuskan
+
+- Kebijakan refund/reschedule — belum ditentukan.
+- Apa yang terjadi jika user hanya sepihak mau sesi berdua tapi pasangan menolak — perlu alur "invite ke sesi" dengan opsi accept/decline.
+- Skala ke depan: kapan waktu yang tepat menambah konselor kedua, dan bagaimana transisi dari "1 dedicated" ke model marketplace tanpa mengganggu data sesi lama.
+
+## 10. Metrik keberhasilan (usulan)
+
+- Jumlah koneksi berstatus `serius` yang melakukan booking sesi (conversion rate)
+- Tingkat penyelesaian sesi (`confirmed` → `completed`, bukan `cancelled`)
+- Rating rata-rata pasca sesi

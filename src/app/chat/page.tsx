@@ -40,6 +40,11 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!user?.id) return;
+    // Sync family_members ke Supabase dulu sebelum subscribe realtime
+    // RLS Supabase cek tabel ini untuk authorize channel subscription
+    apiFetch("/api/chat/sync-family-members", { method: "POST" }).catch((e) =>
+      console.warn("[chat] sync-family-members failed:", e),
+    );
     fetchChatRooms();
   }, [user?.id]);
 
@@ -54,75 +59,140 @@ export default function ChatPage() {
       return;
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        accessToken: async () => localStorage.getItem("token") || "",
-      },
-    );
+    // Refs untuk cleanup
+    let supabaseClient: ReturnType<typeof createClient> | null = null;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
 
-    supabase.realtime.setAuth(token);
+    const smallId =
+      currentRoom.small_family_uuid || currentRoom.small_family_id;
+    const topic =
+      currentRoom.scope_type === "general"
+        ? `family:${currentRoom.family_uuid}:general`
+        : `family:${currentRoom.family_uuid}:small:${smallId || ""}`;
 
-    const smallId = currentRoom.small_family_uuid || currentRoom.small_family_id;
-    const topic = `chat_room:${currentRoom.id}`;
+    /**
+     * Fetch Supabase-compatible JWT dari server kita.
+     * Server verifikasi custom app JWT dulu, baru mint JWT baru
+     * yang di-sign dengan SUPABASE_JWT_SECRET (HS256).
+     * Token ini yang Supabase bisa verifikasi untuk RLS.
+     */
+    const fetchRealtimeToken = async (): Promise<{
+      token: string;
+      expiresAt: number;
+    } | null> => {
+      try {
+        const res = await apiFetch("/api/chat/realtime-token");
+        if (!res.ok) {
+          console.error("[Realtime] Gagal fetch realtime token:", res.status);
+          return null;
+        }
+        const data = await res.json();
+        return { token: data.token, expiresAt: data.expires_at };
+      } catch (err) {
+        console.error("[Realtime] Error fetch realtime token:", err);
+        return null;
+      }
+    };
 
-    const channel = supabase
-      .channel(topic, { config: { private: true } })
-      .on("broadcast", { event: "message_created" }, (payload) => {
-        const msg = payload.payload as any;
-        if (!msg?.id || seenIdsRef.current.has(msg.id)) return;
-        seenIdsRef.current.add(msg.id);
+    /**
+     * Setup channel dengan token yang sudah di-fetch.
+     * Dipanggil sekali saat mount, dan ulang saat token refresh.
+     */
+    const setupChannel = async () => {
+      if (destroyed) return;
 
-        const chatMsg = toChatMessage(msg);
+      const result = await fetchRealtimeToken();
+      if (!result || destroyed) return;
 
-        setMessages((prev) => {
-          const withoutPending = prev.filter(
-            (m) => !String(m.id).startsWith("temp-"),
-          );
-          return [...withoutPending, chatMsg];
+      const { token: realtimeToken, expiresAt } = result;
+
+      // Buat Supabase client baru dengan token ini
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+
+      // Set auth token — Supabase Realtime akan verifikasi dengan JWT secret-nya
+      supabase.realtime.setAuth(realtimeToken);
+      supabaseClient = supabase as any;
+
+      const channel = supabase
+        .channel(topic, { config: { private: true } })
+        .on("broadcast", { event: "message_created" }, (payload) => {
+          const msg = payload.payload as any;
+          if (!msg?.id || seenIdsRef.current.has(msg.id)) return;
+          seenIdsRef.current.add(msg.id);
+
+          const chatMsg = toChatMessage(msg);
+
+          setMessages((prev) => {
+            const withoutPending = prev.filter(
+              (m) => !String(m.id).startsWith("temp-"),
+            );
+            return [...withoutPending, chatMsg];
+          });
+
+          // Tentukan apakah pesan realtime ini untuk room yang sedang dibuka
+          const isForCurrentRoom =
+            currentRoom &&
+            (msg.room_id
+              ? msg.room_id === currentRoom.id
+              : msg.family_uuid === currentRoom.family_uuid &&
+                msg.scope_type === currentRoom.scope_type &&
+                (msg.small_family_id || null) ===
+                  (currentRoom.small_family_uuid ||
+                    currentRoom.small_family_id ||
+                    null));
+
+          if (isForCurrentRoom) {
+            markRoomAsRead(currentRoom.id, msg.id);
+          } else {
+            setRooms((prev) =>
+              prev.map((r) =>
+                r.family_uuid === msg.family_uuid &&
+                r.scope_type === msg.scope_type &&
+                (r.small_family_uuid || r.small_family_id || null) ===
+                  (msg.small_family_id || null)
+                  ? { ...r, unread_count: (r.unread_count || 0) + 1 }
+                  : r,
+              ),
+            );
+          }
+        })
+        .subscribe((status, err) => {
+          console.log(`[Realtime] ${topic} → status: ${status}`);
+          if (status === "CLOSED") {
+            console.warn(`[Realtime] Channel CLOSED for ${topic}.`);
+          }
+          if (err) {
+            console.error(`[Realtime] Error on ${topic}:`, err);
+          }
         });
 
-        // Tentukan apakah pesan realtime ini untuk room yang sedang dibuka
-        const isForCurrentRoom =
-          currentRoom &&
-          (msg.room_id ? msg.room_id === currentRoom.id : (
-            msg.family_uuid === currentRoom.family_uuid &&
-            msg.scope_type === currentRoom.scope_type &&
-            (msg.small_family_id || null) ===
-              (currentRoom.small_family_uuid ||
-                currentRoom.small_family_id ||
-                null)
-          ));
+      // Jadwalkan refresh token 5 menit sebelum expire
+      // Supaya channel tidak terputus karena token expired
+      const msUntilExpiry = expiresAt - Date.now();
+      const refreshIn = Math.max(msUntilExpiry - 5 * 60 * 1000, 60 * 1000);
 
-        if (isForCurrentRoom) {
-          markRoomAsRead(currentRoom.id, msg.id);
-        } else {
-          // Increment badge untuk room lain secara live
-          setRooms((prev) =>
-            prev.map((r) =>
-              r.family_uuid === msg.family_uuid &&
-              r.scope_type === msg.scope_type &&
-              (r.small_family_uuid || r.small_family_id || null) ===
-                (msg.small_family_id || null)
-                ? { ...r, unread_count: (r.unread_count || 0) + 1 }
-                : r,
-            ),
-          );
-        }
-      })
-      .subscribe((status, err) => {
-        console.log(`[Realtime] ${topic} → status: ${status}`);
-        if (status === "CLOSED") {
-          console.warn(`[Realtime] Channel CLOSED for ${topic}.`);
-        }
-        if (err) {
-          console.error(`[Realtime] Error on ${topic}:`, err);
-        }
-      });
+      refreshTimer = setTimeout(async () => {
+        if (destroyed) return;
+        console.log("[Realtime] Refreshing realtime token...");
+        // Hapus channel lama, buat ulang dengan token baru
+        await supabase.removeChannel(channel);
+        setupChannel();
+      }, refreshIn);
+    };
+
+    setupChannel();
 
     return () => {
-      supabase.removeChannel(channel);
+      destroyed = true;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      if (supabaseClient) {
+        // removeAllChannels untuk cleanup semua channel di client ini
+        supabaseClient.removeAllChannels();
+      }
     };
   }, [currentRoom, user?.id]);
 

@@ -21,14 +21,13 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-// Setiap "tick" scroll menambah progress sebesar ini — konstan, tidak peduli
-// seberapa besar delta-nya. Efeknya: pelan atau cepat, jumlah "klik scroll"
-// yang dibutuhkan tetap sama (~18 tick untuk full progress).
-const PROGRESS_PER_TICK = 0.055;
+// Setiap tick scroll: progress bertambah sebesar delta * SCROLL_SENSITIVITY,
+// supaya gerakan video terasa proporsional dengan kecepatan scroll.
+const SCROLL_SENSITIVITY = 0.0015;
 
 // Delta minimum agar dihitung satu "tick". Mencegah micro-movement trackpad
 // yang tidak sengaja terhitung.
-const MIN_DELTA = 2;
+const MIN_DELTA = 1.5;
 
 // Delay unlock setelah progress = 1 (ms)
 const UNLOCK_DELAY = 350;
@@ -76,16 +75,14 @@ export function HeroVideoScrub() {
   };
 
   /** Update progress dan sinkronkan ke video.
-   *  delta: raw wheel delta — hanya dipakai untuk arah (+/-).
-   *  Besarnya langsung PROGRESS_PER_TICK, bukan proporsional ke delta,
-   *  supaya scroll pelan dan cepat dapat jumlah "langkah" yang sama.
+   *  delta: raw wheel delta — kali SCROLL_SENSITIVITY supaya
+   *  scroll cepat memicu progress cepat, scroll pelan mulus.
    */
   const applyDelta = (delta: number) => {
-    if (Math.abs(delta) < MIN_DELTA) return; // abaikan micro-jitter trackpad
+    if (Math.abs(delta) < MIN_DELTA) return;
     const video = videoRef.current;
-    const dir = delta > 0 ? 1 : -1;
     const newP = Math.min(
-      Math.max(progressRef.current + dir * PROGRESS_PER_TICK, 0),
+      Math.max(progressRef.current + delta * SCROLL_SENSITIVITY, 0),
       1,
     );
     progressRef.current = newP;
@@ -217,7 +214,7 @@ export function HeroVideoScrub() {
         currentTimeRef.current = lerp(
           currentTimeRef.current,
           targetTimeRef.current,
-          0.1,
+          0.2,
         );
         if (Math.abs(currentTimeRef.current - video.currentTime) > 0.008) {
           video.currentTime = currentTimeRef.current;
@@ -270,22 +267,13 @@ export function HeroVideoScrub() {
           <h1 className={`ck-hero-h1${h1Visible ? " visible" : ""}`}>
             Setiap tahun kita kumpul.
             <br />
-            <em>Tapi silsilahnya makin kabur.</em>
+            <em>Tapi benang cerita kami tak sempat utuh.</em>
           </h1>
 
           <p className={`ck-hero-sub${subVisible ? " visible" : ""}`}>
             Nama yang sudah terlupa. Cerita yang ikut pergi bersama yang tertua.
             Mulai simpan sekarang — sebelum tidak ada lagi yang ingat.
           </p>
-
-          <div className={`ck-hero-cta${ctaVisible ? " visible" : ""}`}>
-            <Link href="/auth/register" className="ck-btn-primary">
-              Mulai Simpan Cerita
-            </Link>
-            <Link href="/auth/login" className="ck-btn-ghost-light">
-              Sudah punya akun
-            </Link>
-          </div>
         </div>
 
         {/* Scroll hint — hanya di awal */}

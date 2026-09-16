@@ -1,9 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db_helper';
-import { writeFile, mkdir, unlink } from 'fs/promises';
-import path from 'path';
-import { randomUUID } from 'crypto';
-import { requireAuth } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import pool from "@/lib/db_helper";
+import {
+  uploadToStorage,
+  deleteFromStorage,
+  extractStoragePath,
+} from "@/lib/storage";
+import { randomUUID } from "crypto";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,13 +15,13 @@ export async function GET(request: NextRequest) {
 
     const userId = auth.userId;
     const result = await pool.query(
-      'SELECT id, full_name, email, phone, gender, birth_date, photo_url FROM users WHERE id = $1',
-      [userId]
+      "SELECT id, full_name, email, phone, gender, birth_date, photo_url FROM users WHERE id = $1",
+      [userId],
     );
     return NextResponse.json({ user: result.rows[0] || null });
   } catch (error) {
-    console.error('Profile GET error:', error);
-    return NextResponse.json({ error: 'Terjadi kesalahan' }, { status: 500 });
+    console.error("Profile GET error:", error);
+    return NextResponse.json({ error: "Terjadi kesalahan" }, { status: 500 });
   }
 }
 
@@ -29,7 +32,7 @@ export async function PUT(request: NextRequest) {
 
     const userId = auth.userId;
 
-    const contentType = request.headers.get('content-type') || '';
+    const contentType = request.headers.get("content-type") || "";
     let full_name: string | undefined;
     let email: string | undefined;
     let phone: string | undefined;
@@ -37,9 +40,9 @@ export async function PUT(request: NextRequest) {
     let birth_date: string | undefined;
     let photoFile: File | null = null;
 
-    if (contentType.includes('multipart/form-data')) {
+    if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
-      const profileJson = formData.get('profile') as string;
+      const profileJson = formData.get("profile") as string;
       if (profileJson) {
         const parsed = JSON.parse(profileJson);
         full_name = parsed.full_name;
@@ -48,7 +51,7 @@ export async function PUT(request: NextRequest) {
         gender = parsed.gender;
         birth_date = parsed.birth_date;
       }
-      photoFile = formData.get('photo') as File | null;
+      photoFile = formData.get("photo") as File | null;
     } else {
       const body = await request.json();
       full_name = body.full_name;
@@ -61,36 +64,36 @@ export async function PUT(request: NextRequest) {
     let photoUrl: string | undefined;
 
     if (photoFile) {
-      // Delete previous profile photo file if exists
+      // Hapus foto lama dari Supabase Storage jika ada
       try {
-        const prevRes = await pool.query('SELECT photo_url FROM users WHERE id = $1', [userId]);
+        const prevRes = await pool.query(
+          "SELECT photo_url FROM users WHERE id = $1",
+          [userId],
+        );
         const prevUrl = prevRes.rows[0]?.photo_url;
-        if (prevUrl) {
-          const prevPath = path.join(process.cwd(), 'public', prevUrl.replace(/^\//, ''));
-          try {
-            await unlink(prevPath);
-          } catch (e) {
-            // ignore if file doesn't exist
-            console.warn('Previous profile file delete failed (may not exist)', prevPath);
+        if (prevUrl && prevUrl.includes("supabase")) {
+          const storagePath = extractStoragePath(prevUrl);
+          if (storagePath) {
+            await deleteFromStorage("profiles", storagePath);
           }
         }
       } catch (e) {
-        console.warn('Failed to lookup previous profile photo', e);
+        console.warn("Failed to delete previous profile photo:", e);
       }
 
       const bytes = await photoFile.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
-      const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'profiles');
-      await mkdir(uploadDir, { recursive: true });
-
-      const fileExt = photoFile.name.split('.').pop() || 'jpg';
+      const fileExt = photoFile.name.split(".").pop() || "jpg";
       const fileName = `${userId}-${Date.now()}-${randomUUID()}.${fileExt}`;
-      const filePath = path.join(uploadDir, fileName);
 
-      await writeFile(filePath, buffer);
-
-      photoUrl = `/uploads/profiles/${fileName}`;
+      // Upload ke Supabase Storage bucket "profiles"
+      photoUrl = await uploadToStorage(
+        "profiles",
+        fileName,
+        buffer,
+        photoFile.type,
+      );
     }
 
     const updateFields = [];
@@ -123,7 +126,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (updateFields.length === 0) {
-      return NextResponse.json({ message: 'Tidak ada perubahan' });
+      return NextResponse.json({ message: "Tidak ada perubahan" });
     }
 
     updateFields.push(`updated_at = NOW()`);
@@ -131,7 +134,7 @@ export async function PUT(request: NextRequest) {
 
     const query = `
       UPDATE users 
-      SET ${updateFields.join(', ')}
+      SET ${updateFields.join(", ")}
       WHERE id = $${paramIndex}
       RETURNING id, full_name, email, phone, gender, birth_date, photo_url
     `;
@@ -163,17 +166,17 @@ export async function PUT(request: NextRequest) {
     if (nodeSyncFields.length > 0) {
       nodeSyncValues.push(userId);
       await pool.query(
-        `UPDATE nodes SET ${nodeSyncFields.join(', ')} WHERE user_id = $${nodeIdx}`,
-        nodeSyncValues
+        `UPDATE nodes SET ${nodeSyncFields.join(", ")} WHERE user_id = $${nodeIdx}`,
+        nodeSyncValues,
       );
     }
 
     return NextResponse.json({
-      message: 'Profil berhasil diperbarui',
+      message: "Profil berhasil diperbarui",
       user: result.rows[0],
     });
   } catch (error) {
-    console.error('Profile update error:', error);
-    return NextResponse.json({ error: 'Terjadi kesalahan' }, { status: 500 });
+    console.error("Profile update error:", error);
+    return NextResponse.json({ error: "Terjadi kesalahan" }, { status: 500 });
   }
 }

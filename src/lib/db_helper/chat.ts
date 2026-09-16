@@ -35,7 +35,7 @@ export async function isUserMemberOfChatRoom(
 ): Promise<boolean> {
   const room = await getChatRoomById(roomId);
   if (!room) return false;
-  
+
   // Check room_memberships table first (for taaruf rooms) - TEMPORARILY DISABLED
   // Table not yet created in local DB; will be re-enabled when taaruf is ready
   // const directMembership = await pool.query(
@@ -43,7 +43,7 @@ export async function isUserMemberOfChatRoom(
   //   [roomId, userId]
   // );
   // if (directMembership.rows.length > 0) return true;
-  
+
   // For small rooms: check membership in the specific nuclear family
   if (room.small_family_uuid) {
     const memberResult = await pool.query(
@@ -66,7 +66,7 @@ export async function isUserMemberOfChatRoom(
     );
     return nuclearFamilyCheck.rows.length > 0;
   }
-  
+
   // For general rooms: check if user has any node in any nuclear family connected to this extended group
   if (room.extended_group_id) {
     const memberResult = await pool.query(
@@ -78,8 +78,8 @@ export async function isUserMemberOfChatRoom(
     );
     return memberResult.rows.length > 0;
   }
-  
-return false;
+
+  return false;
 }
 
 /**
@@ -174,7 +174,7 @@ export async function getOrCreateGeneralRoomForExtendedGroup(
 
   // Find a representative nuclear family for naming (try to get from nodes in this extended group)
   let repFamilyUuid = familyUuid;
-  
+
   if (!repFamilyUuid) {
     const repRes = await client.query(
       `SELECT nf.uuid
@@ -193,7 +193,11 @@ export async function getOrCreateGeneralRoomForExtendedGroup(
     `INSERT INTO chat_rooms (family_uuid, scope_type, extended_group_id, name, created_at, updated_at)
      VALUES ($1, 'general', $2, $3, NOW(), NOW())
      RETURNING id, family_uuid, scope_type, small_family_id, small_family_uuid, extended_group_id, name`,
-    [repFamilyUuid, extendedGroupId, (familyName || `Keluarga Besar ${extendedGroupId}`)],
+    [
+      repFamilyUuid,
+      extendedGroupId,
+      familyName || `Keluarga Besar ${extendedGroupId}`,
+    ],
   );
 
   return result.rows[0];
@@ -240,7 +244,10 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
   // If we have nuclear family ids, fetch their uuids to match chat_rooms.family_uuid
   let nuclearFamilyUuids: string[] = [];
   if (nuclearFamilyIds.length > 0) {
-    const nfUres = await pool.query(`SELECT uuid FROM nuclear_families WHERE id = ANY($1::int[])`, [nuclearFamilyIds]);
+    const nfUres = await pool.query(
+      `SELECT uuid FROM nuclear_families WHERE id = ANY($1::int[])`,
+      [nuclearFamilyIds],
+    );
     nuclearFamilyUuids = nfUres.rows.map((r: any) => r.uuid).filter(Boolean);
   }
 
@@ -261,7 +268,7 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
   }
 
   if (conditions.length > 0) {
-    const q = `SELECT id, family_uuid, scope_type, small_family_id, small_family_uuid, extended_group_id, name FROM chat_rooms WHERE (${conditions.join(' OR ')})`;
+    const q = `SELECT id, family_uuid, scope_type, small_family_id, small_family_uuid, extended_group_id, name FROM chat_rooms WHERE (${conditions.join(" OR ")})`;
     const cr = await pool.query(q, params);
     for (const r of cr.rows) {
       if (!seenRoomIds.has(r.id)) {
@@ -273,7 +280,9 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
 
   // 4) Ensure general rooms exist for any extended group the user belongs to
   for (const egId of extendedGroupIds) {
-    const exists = rooms.find((r) => r.extended_group_id === egId && r.scope_type === 'general');
+    const exists = rooms.find(
+      (r) => r.extended_group_id === egId && r.scope_type === "general",
+    );
     if (!exists) {
       // Try to create a representative room: find one node in the extended group with a current_nuclear_family
       const repRes = await pool.query(
@@ -284,41 +293,76 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
       let familyUuid = null;
       let familyName = null;
       if (rep && rep.current_nuclear_family_id) {
-        const nf = await pool.query(`SELECT uuid, name FROM nuclear_families WHERE id = $1 LIMIT 1`, [rep.current_nuclear_family_id]);
+        const nf = await pool.query(
+          `SELECT uuid, name FROM nuclear_families WHERE id = $1 LIMIT 1`,
+          [rep.current_nuclear_family_id],
+        );
         if (nf.rows[0]) {
           familyUuid = nf.rows[0].uuid;
           familyName = nf.rows[0].name;
         }
       }
 
-// Insert or get chat_room for this extended group
-       // Try select-first then insert to avoid ON CONFLICT issues with partial indexes
-       const sel = await pool.query(
-         `SELECT id, family_uuid, scope_type, small_family_id, small_family_uuid, extended_group_id, name
+      // Insert or get chat_room for this extended group
+      // Try select-first then insert to avoid ON CONFLICT issues with partial indexes
+      const sel = await pool.query(
+        `SELECT id, family_uuid, scope_type, small_family_id, small_family_uuid, extended_group_id, name
           FROM chat_rooms WHERE extended_group_id = $1 AND scope_type = 'general' LIMIT 1`,
-         [egId]
-       );
-       if (sel.rows[0]) {
-         if (!seenRoomIds.has(sel.rows[0].id)) {
-           seenRoomIds.add(sel.rows[0].id);
-           rooms.push(sel.rows[0]);
-         }
-       } else {
-         const ins = await pool.query(
-           `INSERT INTO chat_rooms (family_uuid, scope_type, small_family_uuid, extended_group_id, name, created_at, updated_at)
+        [egId],
+      );
+      if (sel.rows[0]) {
+        if (!seenRoomIds.has(sel.rows[0].id)) {
+          seenRoomIds.add(sel.rows[0].id);
+          rooms.push(sel.rows[0]);
+        }
+      } else {
+        const ins = await pool.query(
+          `INSERT INTO chat_rooms (family_uuid, scope_type, small_family_uuid, extended_group_id, name, created_at, updated_at)
             VALUES ($1, 'general', NULL, $2, $3, NOW(), NOW())
             RETURNING id, family_uuid, scope_type, small_family_id, small_family_uuid, extended_group_id, name`,
-           [familyUuid, egId, familyName || ('Keluarga ' + egId)]
-         );
-         if (!seenRoomIds.has(ins.rows[0].id)) {
-           seenRoomIds.add(ins.rows[0].id);
-           rooms.push(ins.rows[0]);
-         }
-       }
-     }
-   }
+          [familyUuid, egId, familyName || "Keluarga " + egId],
+        );
+        if (!seenRoomIds.has(ins.rows[0].id)) {
+          seenRoomIds.add(ins.rows[0].id);
+          rooms.push(ins.rows[0]);
+        }
+      }
+    }
+  }
 
-  // 5) Also ensure small rooms for nuclear families where the user is a member (optional)
+  // 5) Small rooms via relasi keluarga — penting untuk akses setelah menikah
+  //
+  // Aturan: user tetap bisa chat di small room keluarga inti ayahnya
+  // meski sudah tidak active member di nuclear family tersebut (sudah menikah).
+  // Akses ditentukan oleh relasi parent-child di pohon keluarga, bukan membership aktif.
+  //
+  // Jalur A: user adalah child dari seorang ayah/ibu yang merupakan head sebuah nuclear family
+  //          → user bisa akses small room nuclear family tersebut
+  if (nodeIds.length > 0) {
+    const parentSmallRoomsRes = await pool.query(
+      `SELECT DISTINCT cr.id, cr.family_uuid, cr.scope_type,
+              cr.small_family_id, cr.small_family_uuid,
+              cr.extended_group_id, cr.name
+       FROM parent_child_relations pcr
+       JOIN nodes parent_node ON parent_node.id = pcr.parent_node_id
+       JOIN nuclear_family_memberships nfm ON nfm.node_id = parent_node.id
+                                          AND nfm.role = 'head'
+       JOIN nuclear_families nf ON nf.id = nfm.nuclear_family_id
+       JOIN chat_rooms cr ON cr.small_family_uuid = parent_node.uuid
+                         AND cr.scope_type = 'small'
+       WHERE pcr.child_node_id = ANY($1::int[])`,
+      [nodeIds],
+    );
+
+    for (const r of parentSmallRoomsRes.rows) {
+      if (!seenRoomIds.has(r.id)) {
+        seenRoomIds.add(r.id);
+        rooms.push(r);
+      }
+    }
+  }
+
+  // 5b) Small rooms via nuclear_family aktif (logic lama — untuk anggota aktif)
   if (nuclearFamilyIds.length > 0) {
     for (const nfId of nuclearFamilyIds) {
       // Find husband node user uuid in that nuclear family (head)
@@ -331,13 +375,18 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
       );
       if (husRes.rows[0]) {
         const husbandUuid = husRes.rows[0].uuid;
-        const exists = rooms.find((r) => (r.small_family_uuid === husbandUuid || r.small_family_id === husRes.rows[0].id) && r.scope_type === 'small');
+        const exists = rooms.find(
+          (r) =>
+            (r.small_family_uuid === husbandUuid ||
+              r.small_family_id === husRes.rows[0].id) &&
+            r.scope_type === "small",
+        );
         if (!exists) {
           // Try select-first then insert to avoid ON CONFLICT issues with partial indexes
           const sel = await pool.query(
             `SELECT id, family_uuid, scope_type, small_family_id, small_family_uuid, extended_group_id, name
              FROM chat_rooms WHERE small_family_uuid = $1 AND scope_type = 'small' LIMIT 1`,
-            [husbandUuid]
+            [husbandUuid],
           );
           if (sel.rows[0]) {
             if (!seenRoomIds.has(sel.rows[0].id)) {
@@ -349,7 +398,7 @@ export async function getUserChatRooms(userId: number): Promise<ChatRoom[]> {
               `INSERT INTO chat_rooms (family_uuid, scope_type, small_family_uuid, name, created_at, updated_at)
                VALUES (NULL, 'small', $1, $2, NOW(), NOW())
                RETURNING id, family_uuid, scope_type, small_family_id, small_family_uuid, extended_group_id, name`,
-              [husbandUuid, 'Keluarga ' + (husRes.rows[0].full_name || nfId)],
+              [husbandUuid, "Keluarga " + (husRes.rows[0].full_name || nfId)],
             );
             if (!seenRoomIds.has(ins.rows[0].id)) {
               seenRoomIds.add(ins.rows[0].id);

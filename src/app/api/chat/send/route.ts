@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { initSupabaseServer } from '@/lib/supabase-server';
-import { requireAuth } from '@/lib/auth';
-import { getChatRoomById, isUserMemberOfChatRoom } from '@/lib/db_helper/chat';
-import pool from '@/lib/db_helper';
+import { NextRequest, NextResponse } from "next/server";
+import { initSupabaseServer } from "@/lib/supabase-server";
+import { requireAuth } from "@/lib/auth";
+import { getChatRoomById, isUserMemberOfChatRoom } from "@/lib/db_helper/chat";
+import pool from "@/lib/db_helper";
 
 /**
  * 2026 Architecture (Local-First + Realtime Bus)
@@ -25,7 +25,10 @@ export async function POST(request: NextRequest) {
   const { room_id, content } = body;
 
   if (!room_id || !content) {
-    return NextResponse.json({ error: 'room_id dan content wajib diisi' }, { status: 400 });
+    return NextResponse.json(
+      { error: "room_id dan content wajib diisi" },
+      { status: 400 },
+    );
   }
 
   const userId = auth.userId;
@@ -35,22 +38,29 @@ export async function POST(request: NextRequest) {
     const chatRoom = await getChatRoomById(room_id);
 
     if (!chatRoom) {
-      return NextResponse.json({ error: 'Chat room tidak ditemukan' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Chat room tidak ditemukan" },
+        { status: 404 },
+      );
     }
 
     const isMember = await isUserMemberOfChatRoom(userId, room_id);
     if (!isMember) {
-      return NextResponse.json({ error: 'Anda bukan anggota keluarga ini' }, { status: 403 });
+      return NextResponse.json(
+        { error: "Anda bukan anggota keluarga ini" },
+        { status: 403 },
+      );
     }
 
     const userRes = await pool.query(
-      'SELECT full_name, photo_url FROM users WHERE uuid = $1',
-      [userUuid]
+      "SELECT full_name, photo_url FROM users WHERE uuid = $1",
+      [userUuid],
     );
-    const senderName = userRes.rows[0]?.full_name || 'Unknown User';
+    const senderName = userRes.rows[0]?.full_name || "Unknown User";
     const senderPhoto = userRes.rows[0]?.photo_url || null;
 
-    const smallFamilyId = chatRoom.small_family_uuid || chatRoom.small_family_id || null;
+    const smallFamilyId =
+      chatRoom.small_family_uuid || chatRoom.small_family_id || null;
     const now = new Date().toISOString();
 
     const localResult = await pool.query(
@@ -71,16 +81,15 @@ export async function POST(request: NextRequest) {
         senderName,
         senderPhoto,
         content,
-        'text',
+        "text",
         now,
-      ]
+      ],
     );
 
     const localMessage = localResult.rows[0];
 
     try {
-      await supabase.from('messages').insert({
-        room_id: room_id,
+      await supabase.from("messages").insert({
         family_uuid: chatRoom.family_uuid,
         scope_type: chatRoom.scope_type,
         small_family_id: smallFamilyId,
@@ -91,12 +100,18 @@ export async function POST(request: NextRequest) {
         created_at: now,
       });
     } catch (supabaseErr) {
-      console.warn('[Chat Send] Supabase insert failed (message safe in local DB):', supabaseErr);
+      console.warn(
+        "[Chat Send] Supabase insert failed (message safe in local DB):",
+        supabaseErr,
+      );
     }
 
     return NextResponse.json(localMessage, { status: 201 });
   } catch (error: any) {
-    console.error('Chat send error:', error);
-    return NextResponse.json({ error: error.message || 'Gagal mengirim pesan' }, { status: 500 });
+    console.error("Chat send error:", error);
+    return NextResponse.json(
+      { error: error.message || "Gagal mengirim pesan" },
+      { status: 500 },
+    );
   }
 }
