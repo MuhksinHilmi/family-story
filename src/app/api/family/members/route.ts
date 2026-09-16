@@ -1,83 +1,93 @@
-import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db_helper';
-import { requireAuth } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import pool from "@/lib/db_helper";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
-  // Protect this endpoint - requires valid JWT + fresh X-Timestamp
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
   const { searchParams } = new URL(request.url);
-  const user_id = searchParams.get('user_id');
-  const family_id = searchParams.get('family_id');
+  const user_id = searchParams.get("user_id");
+  const family_id = searchParams.get("family_id"); // integer nuclear_family_id
 
   try {
     if (user_id) {
-      // Only allow user to query their own data (basic ownership check)
-      // Compare as string to handle number vs string safely
       if (String(user_id) !== String(auth.userId)) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
       }
 
-      // Mode 1: Get families the user belongs to (used by Chat page)
-      // Now also returns family_uuid + the general chat_room UUID for realtime
+      // Mode 1: ambil semua nuclear family yang user ikuti + chat room general-nya
       const result = await pool.query(
         `SELECT 
-           fm.id, 
-           fm.family_id, 
-           f.uuid as family_uuid,
-           fm.role, 
-           fm.joined_at, 
-           f.name as family_name,
-           cr.id as chat_room_id,
-           cr.scope_type as chat_scope
-         FROM family_members fm
-         JOIN families f ON fm.family_id = f.id
-         LEFT JOIN chat_rooms cr 
-           ON cr.family_id = f.id AND cr.scope_type = 'general'
-         WHERE fm.user_id = $1`,
-        [user_id]
+           nf.id        AS family_id,
+           nf.uuid      AS family_uuid,
+           nf.name      AS family_name,
+           nfm.role,
+           nfm.joined_at,
+           cr.id        AS chat_room_id,
+           cr.scope_type AS chat_scope
+         FROM nuclear_family_memberships nfm
+         JOIN nuclear_families nf ON nf.id = nfm.nuclear_family_id
+         JOIN nodes n ON n.id = nfm.node_id
+         LEFT JOIN chat_rooms cr ON cr.family_uuid = nf.uuid AND cr.scope_type = 'general'
+         WHERE n.user_id = $1 AND nfm.left_at IS NULL`,
+        [user_id],
       );
       return NextResponse.json(result.rows, { status: 200 });
     }
 
     if (family_id) {
-      // Mode 2: Get members of a family (used by Members page)
-      // For now allow any authenticated user (later can restrict to family members only)
+      const fid = parseInt(family_id, 10);
+      if (isNaN(fid)) {
+        return NextResponse.json(
+          { error: "family_id tidak valid" },
+          { status: 400 },
+        );
+      }
+
+      // Mode 2: daftar anggota nuclear family (dipakai halaman /members)
       const result = await pool.query(
-        `SELECT 
-           fm.id,
-           fm.user_id,
-           fm.role,
-           fm.joined_at,
+        `SELECT
+           u.id         AS id,
            u.full_name,
            u.email,
            u.phone,
            u.gender,
-           u.birth_date
-         FROM family_members fm
-         LEFT JOIN users u ON fm.user_id = u.id
-         WHERE fm.family_id = $1
-         ORDER BY fm.joined_at ASC`,
-        [family_id]
+           u.birth_date,
+           u.photo_url,
+           nfm.role
+         FROM nuclear_family_memberships nfm
+         JOIN nodes n ON n.id = nfm.node_id
+         LEFT JOIN users u ON u.id = n.user_id
+         WHERE nfm.nuclear_family_id = $1
+           AND nfm.left_at IS NULL
+         ORDER BY nfm.joined_at ASC`,
+        [fid],
       );
 
       const members = result.rows.map((row: any) => ({
-        id: row.user_id ?? row.id,
-        full_name: row.full_name || 'Unknown',
-        email: row.email || '',
+        id: row.id,
+        full_name: row.full_name || "Anggota Belum Daftar",
+        email: row.email || "",
         phone: row.phone || undefined,
         gender: row.gender || undefined,
         birth_date: row.birth_date || undefined,
+        photo_url: row.photo_url || undefined,
         role: row.role,
       }));
 
       return NextResponse.json({ members }, { status: 200 });
     }
 
-    return NextResponse.json({ error: 'user_id atau family_id diperlukan' }, { status: 400 });
+    return NextResponse.json(
+      { error: "user_id atau family_id diperlukan" },
+      { status: 400 },
+    );
   } catch (error) {
-    console.error('Family members fetch error:', error);
-    return NextResponse.json({ error: 'Gagal mengambil data keluarga' }, { status: 500 });
+    console.error("Family members fetch error:", error);
+    return NextResponse.json(
+      { error: "Gagal mengambil data keluarga" },
+      { status: 500 },
+    );
   }
 }
