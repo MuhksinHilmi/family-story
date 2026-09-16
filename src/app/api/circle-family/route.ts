@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db_helper';
-import { requireAuth } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import pool from "@/lib/db_helper";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +11,12 @@ export async function GET(request: NextRequest) {
     const groupsRes = await pool.query(
       `SELECT h.id, h.name, h.description, h.type, h.topics, h.chat_room_uuid,
               hm.is_admin,
-              (SELECT COUNT(DISTINCT nuclear_family_id) FROM halaqah_members WHERE halaqah_id = h.id) as member_count
+              (SELECT COUNT(DISTINCT nfm2.nuclear_family_id)
+               FROM halaqah_members hm2
+               JOIN nodes n2 ON hm2.node_id = n2.id
+               JOIN nuclear_family_memberships nfm2 ON n2.id = nfm2.node_id
+               WHERE hm2.halaqah_id = h.id
+              ) as member_count
        FROM halaqahs h
        JOIN halaqah_members hm ON h.id = hm.halaqah_id
        JOIN nodes n ON hm.node_id = n.id
@@ -19,7 +24,7 @@ export async function GET(request: NextRequest) {
        JOIN nuclear_families nf ON nfm.nuclear_family_id = nf.id
        WHERE nf.id = $1 AND hm.status = 'active'
        ORDER BY h.updated_at DESC`,
-      [auth.nuclearFamilyId]
+      [auth.nuclearFamilyId],
     );
 
     const groups = groupsRes.rows.map((g: any) => ({
@@ -35,7 +40,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ groups });
   } catch (error) {
-    console.error('Get halaqah groups error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Get halaqah groups error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

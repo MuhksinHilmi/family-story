@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db_helper';
-import { requireAuth } from '@/lib/auth';
-import { randomUUID } from 'crypto';
+import { NextRequest, NextResponse } from "next/server";
+import pool from "@/lib/db_helper";
+import { requireAuth } from "@/lib/auth";
+import { randomUUID } from "crypto";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,28 +12,31 @@ export async function POST(request: NextRequest) {
     const { inviteId, newGroupName } = body;
 
     if (!inviteId) {
-      return NextResponse.json({ error: 'ID undangan diperlukan' }, { status: 400 });
+      return NextResponse.json(
+        { error: "ID undangan diperlukan" },
+        { status: 400 },
+      );
     }
 
-    await pool.query('BEGIN');
+    await pool.query("BEGIN");
 
     try {
       // 1. Fetch the invitation
       const inviteRes = await pool.query(
         `SELECT * FROM halaqah_invites WHERE id = $1 AND status = 'pending'`,
-        [inviteId]
+        [inviteId],
       );
       const invite = inviteRes.rows[0];
 
       if (!invite) {
-        throw new Error('Undangan tidak ditemukan atau sudah diproses');
+        throw new Error("Undangan tidak ditemukan atau sudah diproses");
       }
 
       // 2. Identify the two nuclear families involved
       // Sender family
       const senderNodeRes = await pool.query(
         `SELECT current_nuclear_family_id FROM nodes WHERE id = $1`,
-        [invite.sender_node_id]
+        [invite.sender_node_id],
       );
       const senderNfId = senderNodeRes.rows[0]?.current_nuclear_family_id;
 
@@ -41,7 +44,7 @@ export async function POST(request: NextRequest) {
       const targetNfId = invite.target_nuclear_family_id;
 
       if (!senderNfId || !targetNfId) {
-        throw new Error('Informasi keluarga inti tidak lengkap');
+        throw new Error("Informasi keluarga inti tidak lengkap");
       }
 
       // 3. Create the Halaqah group
@@ -52,11 +55,11 @@ export async function POST(request: NextRequest) {
         RETURNING id, uuid`,
         [
           targetNfId, // Admin is usually the target family if they accept
-          newGroupName || `Halaqah ${invite.theme || 'Belajar'}`,
+          newGroupName || `Halaqah ${invite.theme || "Belajar"}`,
           `Grup belajar bersama berdasarkan undangan.`,
-          invite.theme || 'umum',
+          invite.theme || "umum",
           invite.suggested_skills || [],
-        ]
+        ],
       );
       const halaqah = halaqahRes.rows[0];
 
@@ -65,13 +68,13 @@ export async function POST(request: NextRequest) {
       await pool.query(
         `INSERT INTO chat_rooms (id, scope_type, name, created_at, updated_at)
          VALUES ($1, 'general', $2, NOW(), NOW())`,
-        [chatRoomUuid, newGroupName || `Halaqah ${invite.theme || 'Belajar'}`]
+        [chatRoomUuid, newGroupName || `Halaqah ${invite.theme || "Belajar"}`],
       );
 
       // Link chat room to halaqah
       await pool.query(
         `UPDATE halaqahs SET chat_room_uuid = $1 WHERE id = $2`,
-        [chatRoomUuid, halaqah.id]
+        [chatRoomUuid, halaqah.id],
       );
 
       // 5. Add members to Halaqah and Chat Room
@@ -83,45 +86,63 @@ export async function POST(request: NextRequest) {
          FROM nodes n
          JOIN nuclear_family_memberships nfm ON n.id = nfm.node_id
          WHERE nfm.nuclear_family_id = ANY($1::int[])`,
-        [allNfIds]
+        [allNfIds],
       );
       const allMembers = membersRes.rows;
 
       for (const member of allMembers) {
+        // Tentukan is_admin: true jika member adalah head dari target nuclear family
+        const headRes = await pool.query(
+          `SELECT nfm.node_id FROM nuclear_family_memberships nfm
+           WHERE nfm.nuclear_family_id = $1 AND nfm.role = 'head' AND nfm.left_at IS NULL
+           LIMIT 1`,
+          [targetNfId],
+        );
+        const isAdmin = member.node_id === headRes.rows[0]?.node_id;
+
         // Add to halaqah_members
-        await pool.query(
-          `INSERT INTO halaqah_members (halaqah_id, node_id, status, is_admin)
+        await pool
+          .query(
+            `INSERT INTO halaqah_members (halaqah_id, node_id, status, is_admin)
            VALUES ($1, $2, 'active', $3)`,
-          [halaqah.id, member.node_id, member.node_id === (await pool.query(`SELECT head_node_id FROM nuclear_families WHERE id = $1`, [targetNfId])).rows[0]?.head_node_id]
-        ).catch(() => {}); // Ignore unique constraint if already exists
+            [halaqah.id, member.node_id, isAdmin],
+          )
+          .catch(() => {}); // Ignore unique constraint if already exists
 
         // Add to room_memberships (chat)
-        await pool.query(
-          `INSERT INTO room_memberships (chat_room_id, user_id)
+        await pool
+          .query(
+            `INSERT INTO room_memberships (chat_room_id, user_id)
            VALUES ($1, $2)`,
-          [chatRoomUuid, member.user_id]
-        ).catch(() => {});
+            [chatRoomUuid, member.user_id],
+          )
+          .catch(() => {});
       }
 
       // 6. Mark invitation as accepted
       await pool.query(
         `UPDATE halaqah_invites SET status = 'accepted', updated_at = NOW() WHERE id = $1`,
-        [inviteId]
+        [inviteId],
       );
 
-      await pool.query('COMMIT');
+      await pool.query("COMMIT");
       return NextResponse.json({
-        message: 'Halaqah berhasil dibuat!',
+        message: "Halaqah berhasil dibuat!",
         halaqahId: halaqah.id,
-        chatRoomUuid: chatRoomUuid
+        chatRoomUuid: chatRoomUuid,
       });
-
     } catch (error: any) {
-      await pool.query('ROLLBACK');
-      console.error('Accept Invite error:', error);
-      return NextResponse.json({ error: error.message || 'Terjadi kesalahan' }, { status: 500 });
+      await pool.query("ROLLBACK");
+      console.error("Accept Invite error:", error);
+      return NextResponse.json(
+        { error: error.message || "Terjadi kesalahan" },
+        { status: 500 },
+      );
     }
   } catch (error) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

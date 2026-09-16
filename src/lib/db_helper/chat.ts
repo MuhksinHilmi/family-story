@@ -9,13 +9,12 @@
 import pool from "./db";
 
 export interface ChatRoom {
-  id: string; // internal PK (UUID of the chat_rooms row)
-  family_id: number; // legacy integer family id (used only for membership checks)
-  family_uuid: string | null; // stable UUID of the family — primary logical identifier for chat
+  id: string;
+  family_uuid: string | null;
   scope_type: "general" | "small";
-  small_family_id?: number | null; // DEPRECATED (old integer father node id)
-  small_family_uuid?: string | null; // UUID of the husband/father (from users.uuid). This is now the main identifier for small rooms.
-  extended_group_id?: number | null; // Reference to extended_family_groups.id for general rooms
+  small_family_id?: number | null; // DEPRECATED — masih ada di DB untuk backward compat
+  small_family_uuid?: string | null;
+  extended_group_id?: number | null;
   name?: string;
 }
 export async function getChatRoomById(
@@ -87,7 +86,7 @@ export async function isUserMemberOfChatRoom(
  * Logical key = family_uuid (scope_type = 'general')
  */
 export async function getOrCreateGeneralRoom(
-  familyId: number,
+  familyId: number | null,
   familyUuid: string,
   familyName?: string | null,
 ): Promise<ChatRoom> {
@@ -95,7 +94,7 @@ export async function getOrCreateGeneralRoom(
 
   // Use select-then-insert to handle partial unique indexes properly
   const sel = await pool.query(
-    `SELECT id, family_id, family_uuid, scope_type, small_family_id, small_family_uuid, name
+    `SELECT id, family_uuid, scope_type, small_family_id, small_family_uuid, name
      FROM chat_rooms WHERE family_uuid = $1 AND scope_type = 'general' LIMIT 1`,
     [familyUuid],
   );
@@ -104,10 +103,10 @@ export async function getOrCreateGeneralRoom(
   }
 
   const result = await pool.query(
-    `INSERT INTO chat_rooms (family_id, family_uuid, scope_type, name, created_at, updated_at)
-     VALUES ($1, $2, 'general', $3, NOW(), NOW())
-     RETURNING id, family_id, family_uuid, scope_type, small_family_id, small_family_uuid, name`,
-    [familyId, familyUuid, roomName],
+    `INSERT INTO chat_rooms (family_uuid, scope_type, name, created_at, updated_at)
+     VALUES ($1, 'general', $2, NOW(), NOW())
+     RETURNING id, family_uuid, scope_type, small_family_id, small_family_uuid, name`,
+    [familyUuid, roomName],
   );
 
   return result.rows[0];
@@ -133,7 +132,7 @@ export async function getOrCreateSmallRoom(
 
   // Use select-then-insert to handle partial unique indexes properly
   const sel = await client.query(
-    `SELECT id, family_id, family_uuid, scope_type, small_family_id, small_family_uuid, name
+    `SELECT id, family_uuid, scope_type, small_family_id, small_family_uuid, name
      FROM chat_rooms WHERE small_family_uuid = $1 AND scope_type = 'small' LIMIT 1`,
     [husbandUserUuid],
   );
@@ -142,10 +141,10 @@ export async function getOrCreateSmallRoom(
   }
 
   const result = await client.query(
-    `INSERT INTO chat_rooms (family_id, family_uuid, scope_type, small_family_uuid, name, created_at, updated_at)
-     VALUES ($1, $2, 'small', $3, $4, NOW(), NOW())
-     RETURNING id, family_id, family_uuid, scope_type, small_family_id, small_family_uuid, name`,
-    [null, familyUuid, husbandUserUuid, roomName],
+    `INSERT INTO chat_rooms (family_uuid, scope_type, small_family_uuid, name, created_at, updated_at)
+     VALUES ($1, 'small', $2, $3, NOW(), NOW())
+     RETURNING id, family_uuid, scope_type, small_family_id, small_family_uuid, name`,
+    [familyUuid, husbandUserUuid, roomName],
   );
 
   return result.rows[0];

@@ -141,21 +141,23 @@ export async function POST(request: NextRequest) {
         const allMembers = membersRes.rows;
 
         for (const member of allMembers) {
+          // Tentukan is_admin: true jika member adalah head dari target nuclear family
+          const isAdmin =
+            member.node_id ===
+            (
+              await pool.query(
+                `SELECT nfm.node_id FROM nuclear_family_memberships nfm
+                 WHERE nfm.nuclear_family_id = $1 AND nfm.role = 'head' AND nfm.left_at IS NULL
+                 LIMIT 1`,
+                [targetNfId],
+              )
+            ).rows[0]?.node_id;
+
           await pool
             .query(
               `INSERT INTO halaqah_members (halaqah_id, node_id, status, is_admin)
              VALUES ($1, $2, 'active', $3)`,
-              [
-                halaqah.id,
-                member.node_id,
-                member.node_id ===
-                  (
-                    await pool.query(
-                      `SELECT head_node_id FROM nuclear_families WHERE id = $1`,
-                      [targetNfId],
-                    )
-                  ).rows[0]?.head_node_id,
-              ],
+              [halaqah.id, member.node_id, isAdmin],
             )
             .catch(() => {});
 

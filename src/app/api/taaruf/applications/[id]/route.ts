@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db_helper';
-import { requireAuth } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import pool from "@/lib/db_helper";
+import { requireAuth } from "@/lib/auth";
 
-export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
@@ -12,21 +15,21 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   const body = await request.json();
   const { action, response_message } = body;
 
-  if (!action || !['accept', 'reject'].includes(action)) {
+  if (!action || !["accept", "reject"].includes(action)) {
     return NextResponse.json(
       { error: 'action harus "accept" atau "reject"' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   if (!response_message || response_message.trim().length < 20) {
     return NextResponse.json(
-      { error: 'Pesan respons minimal 20 karakter' },
-      { status: 400 }
+      { error: "Pesan respons minimal 20 karakter" },
+      { status: 400 },
     );
   }
 
-const client = await pool.connect();
+  const client = await pool.connect();
 
   try {
     const appCheckRes = await client.query(
@@ -42,36 +45,36 @@ const client = await pool.connect();
        WHERE ta.id = $1
        AND ta.status = 'pending'
        AND rp.user_id = $2`,
-      [applicationId, userId]
+      [applicationId, userId],
     );
 
     if (appCheckRes.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Lamaran tidak ditemukan atau bukan untuk Anda' },
-        { status: 404 }
+        { error: "Lamaran tidak ditemukan atau bukan untuk Anda" },
+        { status: 404 },
       );
     }
 
     const application = appCheckRes.rows[0];
 
-    if (action === 'reject') {
+    if (action === "reject") {
       await client.query(
         `UPDATE taaruf_applications 
          SET status = 'rejected', 
              response_message = $1,
              responded_at = NOW()
          WHERE id = $2`,
-        [response_message.trim(), applicationId]
+        [response_message.trim(), applicationId],
       );
 
       return NextResponse.json({
         success: true,
-        message: 'Lamaran telah ditolak',
-        action: 'rejected',
+        message: "Lamaran telah ditolak",
+        action: "rejected",
       });
     }
 
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     try {
       await client.query(
@@ -80,7 +83,7 @@ const client = await pool.connect();
              response_message = $1,
              responded_at = NOW()
          WHERE id = $2`,
-        [response_message.trim(), applicationId]
+        [response_message.trim(), applicationId],
       );
 
       await client.query(
@@ -89,7 +92,7 @@ const client = await pool.connect();
          WHERE sender_profile_id = $1 
          AND status = 'pending' 
          AND id != $2`,
-        [application.sender_profile_id, applicationId]
+        [application.sender_profile_id, applicationId],
       );
 
       await client.query(
@@ -98,7 +101,7 @@ const client = await pool.connect();
          WHERE recipient_profile_id = $1 
          AND status = 'pending' 
          AND id != $2`,
-        [application.recipient_profile_id, applicationId]
+        [application.recipient_profile_id, applicationId],
       );
 
       const [senderNodeRes, recipientNodeRes] = await Promise.all([
@@ -106,13 +109,13 @@ const client = await pool.connect();
           `SELECT n.id, n.uuid, n.current_nuclear_family_id
            FROM nodes n
            WHERE n.id = $1`,
-          [application.sender_node_id]
+          [application.sender_node_id],
         ),
         client.query(
           `SELECT n.id, n.uuid, n.current_nuclear_family_id
            FROM nodes n
            WHERE n.id = $1`,
-          [application.recipient_node_id]
+          [application.recipient_node_id],
         ),
       ]);
 
@@ -124,7 +127,7 @@ const client = await pool.connect();
          (husband_node_id, wife_node_id, status, created_at, updated_at)
          VALUES ($1, $2, 'married', NOW(), NOW())
          RETURNING id`,
-        [senderNode.id, recipientNode.id]
+        [senderNode.id, recipientNode.id],
       );
 
       const marriageId = marriageRes.rows[0].id;
@@ -133,13 +136,13 @@ const client = await pool.connect();
         senderNode.current_nuclear_family_id
           ? client.query(
               `SELECT id, uuid FROM nuclear_families WHERE id = $1`,
-              [senderNode.current_nuclear_family_id]
+              [senderNode.current_nuclear_family_id],
             )
           : Promise.resolve({ rows: [] }),
         recipientNode.current_nuclear_family_id
           ? client.query(
               `SELECT id, uuid FROM nuclear_families WHERE id = $1`,
-              [recipientNode.current_nuclear_family_id]
+              [recipientNode.current_nuclear_family_id],
             )
           : Promise.resolve({ rows: [] }),
       ]);
@@ -150,7 +153,7 @@ const client = await pool.connect();
          (family_uuid, scope_type, name, created_at, updated_at)
          VALUES (gen_random_uuid(), 'small', $1, NOW(), NOW())
          RETURNING id, family_uuid`,
-        [roomName]
+        [roomName],
       );
 
       const chatRoomId = roomRes.rows[0].id;
@@ -162,7 +165,7 @@ const client = await pool.connect();
          FROM nodes n
          WHERE n.id = $2
          ON CONFLICT DO NOTHING`,
-        [chatRoomId, senderNode.id]
+        [chatRoomId, senderNode.id],
       );
 
       await client.query(
@@ -171,7 +174,7 @@ const client = await pool.connect();
          FROM nodes n
          WHERE n.id = $2
          ON CONFLICT DO NOTHING`,
-        [chatRoomId, recipientNode.id]
+        [chatRoomId, recipientNode.id],
       );
 
       if (senderFamilyRes.rows[0]) {
@@ -183,7 +186,7 @@ const client = await pool.connect();
            WHERE nfm.nuclear_family_id = $2
            AND n.user_id IS NOT NULL
            ON CONFLICT DO NOTHING`,
-          [chatRoomId, senderNode.current_nuclear_family_id]
+          [chatRoomId, senderNode.current_nuclear_family_id],
         );
       }
 
@@ -196,13 +199,13 @@ const client = await pool.connect();
            WHERE nfm.nuclear_family_id = $2
            AND n.user_id IS NOT NULL
            ON CONFLICT DO NOTHING`,
-          [chatRoomId, recipientNode.current_nuclear_family_id]
+          [chatRoomId, recipientNode.current_nuclear_family_id],
         );
       }
 
       await client.query(
         `UPDATE taaruf_applications SET chat_room_id = $1 WHERE id = $2`,
-        [chatRoomId, applicationId]
+        [chatRoomId, applicationId],
       );
 
       await client.query(
@@ -210,7 +213,7 @@ const client = await pool.connect();
          SET current_marriage_id = $1,
              updated_at = NOW()
          WHERE id IN ($2, $3)`,
-        [marriageId, senderNode.id, recipientNode.id]
+        [marriageId, senderNode.id, recipientNode.id],
       );
 
       const newFamilyRes = await client.query(
@@ -218,7 +221,10 @@ const client = await pool.connect();
          (uuid, name, created_by_node_id, status, created_at, updated_at)
          VALUES (gen_random_uuid(), $1, $2, 'active', NOW(), NOW())
          RETURNING id`,
-        [`Keluarga ${application.sender_name} & ${application.recipient_name}`, senderNode.id]
+        [
+          `Keluarga ${application.sender_name} & ${application.recipient_name}`,
+          senderNode.id,
+        ],
       );
 
       const newFamilyId = newFamilyRes.rows[0].id;
@@ -230,7 +236,7 @@ const client = await pool.connect();
          ($1, $2, 'head', 'marriage', NOW()),
          ($1, $3, 'spouse', 'marriage', NOW())
          ON CONFLICT DO NOTHING`,
-        [newFamilyId, senderNode.id, recipientNode.id]
+        [newFamilyId, senderNode.id, recipientNode.id],
       );
 
       await client.query(
@@ -238,26 +244,26 @@ const client = await pool.connect();
          SET current_nuclear_family_id = $1,
              updated_at = NOW()
          WHERE id IN ($2, $3)`,
-        [newFamilyId, senderNode.id, recipientNode.id]
+        [newFamilyId, senderNode.id, recipientNode.id],
       );
 
-      await client.query('COMMIT');
+      await client.query("COMMIT");
 
       const now = new Date().toISOString();
       await client.query(
         `INSERT INTO messages 
-         (id, chat_room_id, content, is_system, created_at)
-         VALUES (gen_random_uuid(), $1, $2, true, $3)`,
+         (id, chat_room_id, body, type, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'system', $3)`,
         [
-          chatRoomId, 
+          chatRoomId,
           `Alhamdulillah — ${application.sender_name} dan ${application.recipient_name} telah terhubung. Semoga Allah meridhoi proses ta'aruf ini.`,
-          now
-        ]
+          now,
+        ],
       );
 
       return NextResponse.json({
         success: true,
-        message: 'Lamaran diterima. Chat room telah dibuat.',
+        message: "Lamaran diterima. Chat room telah dibuat.",
         chat_room: {
           id: chatRoomId,
           uuid: chatRoomUuid,
@@ -265,14 +271,14 @@ const client = await pool.connect();
         },
       });
     } catch (err) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw err;
     }
   } catch (error) {
-    console.error('PUT /api/taaruf/applications error:', error);
+    console.error("PUT /api/taaruf/applications error:", error);
     return NextResponse.json(
-      { error: 'Gagal memproses respons lamaran' },
-      { status: 500 }
+      { error: "Gagal memproses respons lamaran" },
+      { status: 500 },
     );
   } finally {
     client.release();
