@@ -3,14 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-/* ─────────────────────────────────────────────
-   STATS COUNTER
-───────────────────────────────────────────── */
-const STATS = [
-  { target: 1000, suffix: "+", label: "Keluarga Terdaftar" },
-  { target: 5000, suffix: "+", label: "Anggota Terhubung" },
-  { target: 150, suffix: "+", label: "Kota di Indonesia" },
-];
+type LandingStatKey =
+  | "registeredFamilies"
+  | "connectedMembers"
+  | "marriedCouples";
+
+type LandingStats = Record<LandingStatKey, number>;
+
+const STAT_DEFINITIONS = [
+  { key: "registeredFamilies", label: "Keluarga Besar Terdaftar" },
+  { key: "connectedMembers", label: "Keluarga Terhubung" },
+  { key: "marriedCouples", label: "Pasangan Menikah" },
+] as const;
 
 function useCountUp(target: number, duration = 1800, active = false) {
   const [val, setVal] = useState(0);
@@ -20,7 +24,6 @@ function useCountUp(target: number, duration = 1800, active = false) {
     const start = performance.now();
     const tick = (now: number) => {
       const p = Math.min((now - start) / duration, 1);
-      // ease-out cubic
       const eased = 1 - Math.pow(1 - p, 3);
       setVal(Math.round(eased * target));
       if (p < 1) requestAnimationFrame(tick);
@@ -31,34 +34,21 @@ function useCountUp(target: number, duration = 1800, active = false) {
   return val;
 }
 
-function StatItem(
-  { target, suffix, label }: (typeof STATS)[0] & { active: boolean },
-  active: boolean,
-) {
-  const val = useCountUp(target, 1800, active);
-  return (
-    <div style={{ textAlign: "center" }}>
-      <span className="ck-stat-num">
-        {val.toLocaleString("id-ID")}
-        {suffix}
-      </span>
-      <span className="ck-stat-label">{label}</span>
-    </div>
-  );
-}
-
-function SingleStat({
+function StatItem({
   target,
-  suffix,
   label,
   active,
-}: (typeof STATS)[0] & { active: boolean }) {
+}: {
+  target: number;
+  label: string;
+  active: boolean;
+}) {
   const val = useCountUp(target, 1800, active);
   return (
     <div style={{ textAlign: "center" }}>
       <span className="ck-stat-num">
         {val.toLocaleString("id-ID")}
-        {suffix}
+        {val >= 1000 ? "+" : ""}
       </span>
       <span className="ck-stat-label">{label}</span>
     </div>
@@ -68,6 +58,33 @@ function SingleStat({
 export function StatsSection() {
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(false);
+  const [stats, setStats] = useState<LandingStats | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/landing-stats")
+      .then((response) => {
+        if (!response.ok) throw new Error("Failed to load landing stats");
+        return response.json() as Promise<LandingStats>;
+      })
+      .then((data) => {
+        if (!cancelled) setStats(data);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStats({
+            registeredFamilies: 0,
+            connectedMembers: 0,
+            marriedCouples: 0,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -84,8 +101,13 @@ export function StatsSection() {
     <section ref={ref} className="ck-stats">
       <div className="ck-container">
         <div className="ck-stats-grid">
-          {STATS.map((s) => (
-            <SingleStat key={s.label} {...s} active={active} />
+          {STAT_DEFINITIONS.map((stat) => (
+            <StatItem
+              key={stat.key}
+              target={stats?.[stat.key] ?? 0}
+              label={stat.label}
+              active={active}
+            />
           ))}
         </div>
       </div>
