@@ -510,6 +510,10 @@ function TreePageContent() {
     [onNodesChange, savePosition],
   );
 
+  if (!user || authLoading || (nodes.length === 0 && !currentUserNodeUuid)) {
+    return <FamilyTreeLoader message="Memuat pohon keluarga..." />;
+  }
+
   return (
     <div className="h-[calc(100vh-120px)] bg-[#EDE4D3]">
       <Card className="h-full bg-[#FDFAF5] border border-[#D4C4A8]">

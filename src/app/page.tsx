@@ -46,11 +46,10 @@ export default function LandingPage() {
         <SectionTaaruf />
       </div>
 
-      {/* 9. Stats counter */}
-      <StatsSection />
-
       {/* 10. CTA + Footer */}
       <CTASection />
+      {/* 9. Stats counter */}
+      <StatsSection />
       <LandingFooter />
     </main>
   );

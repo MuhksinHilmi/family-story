@@ -265,15 +265,19 @@ export function HeroVideoScrub() {
         {/* Overlay — opacity selalu 1, tidak ada fade-out */}
         <div className="ck-hero-overlay">
           <h1 className={`ck-hero-h1${h1Visible ? " visible" : ""}`}>
-            Setiap tahun kita kumpul.
+            Setiap tahun kita kumpul bersama keluarga.
             <br />
-            <em>Tapi benang cerita kami tak sempat utuh.</em>
+            <em>Tapi, sudahkah kita kenal semuanya?</em>
           </h1>
 
           <p className={`ck-hero-sub${subVisible ? " visible" : ""}`}>
-            Nama yang sudah terlupa. Cerita yang ikut pergi bersama yang tertua.
-            Mulai simpan sekarang — sebelum tidak ada lagi yang ingat.
+            Ada nama yang mulai lupa. Ada cerita keluarga yang cuma tersimpan di
+            ingatan seseorang.
           </p>
+          <br />
+          <strong className={`ck-hero-cta${ctaVisible ? " visible" : ""}`}>
+            Yuk, mulai rangkai cerita keluarga kita.
+          </strong>
         </div>
 
         {/* Scroll hint — hanya di awal */}

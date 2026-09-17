@@ -193,67 +193,6 @@ export function CTASection() {
       ))}
 
       <div className="ck-container ck-cta-inner">
-        {/* Tiga masalah yang sudah dirasakan — masing-masing satu baris */}
-        <div
-          className="reveal-up"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.875rem",
-            marginBottom: "3rem",
-            maxWidth: 520,
-            marginLeft: "auto",
-            marginRight: "auto",
-          }}
-        >
-          {[
-            {
-              icon: "🌳",
-              text: "Silsilah keluargamu makin kabur setiap generasi.",
-            },
-            {
-              icon: "💍",
-              text: "Mencari pasangan yang tepat, dengan cara yang benar.",
-            },
-            {
-              icon: "📜",
-              text: "Ingin tahu pembagian warisan yang seharusnya seperti apa.",
-            },
-          ].map((item, i) => (
-            <div
-              key={i}
-              className={`reveal-up reveal-delay-${i + 1}`}
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "0.875rem",
-                padding: "1rem 1.25rem",
-                borderRadius: "0.875rem",
-                background: "rgba(242,235,217,0.04)",
-                border: "1px solid rgba(242,235,217,0.07)",
-                textAlign: "left",
-              }}
-            >
-              <span
-                style={{ fontSize: "1.125rem", lineHeight: 1.4, flexShrink: 0 }}
-              >
-                {item.icon}
-              </span>
-              <p
-                style={{
-                  fontSize: "0.9375rem",
-                  fontWeight: 400,
-                  color: "rgba(242,235,217,0.7)",
-                  lineHeight: 1.6,
-                  margin: 0,
-                }}
-              >
-                {item.text}
-              </p>
-            </div>
-          ))}
-        </div>
-
         {/* Headline — undangan, bukan jualan */}
         <h2 className="ck-cta-h2 reveal-up reveal-delay-4">
           Kalau kamu merasakan salah satunya,

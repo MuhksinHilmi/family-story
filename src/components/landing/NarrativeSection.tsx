@@ -38,27 +38,32 @@ export function NarrativeSection() {
           className="ck-narrative-question reveal-up reveal-delay-1"
           style={{ fontSize: "clamp(1.6rem, 4vw, 2.75rem)" }}
         >
-          Rumah nenek penuh sandal —
+          Suatu hari, kamu mungkin akan bertanya… —
           <br />
-          <em>Tapi kamu lupa nama om-nya.</em>
+          <em>“Itu siapa, ya?”</em>
         </h2>
 
         <div className="ck-narrative-divider reveal-up reveal-delay-2" />
 
         {/* Beat 1 */}
         <p className="ck-narrative-body reveal-up reveal-delay-2">
-          Bau ketupat dari dapur. Anak-anak salim satu-satu. Kamu bisik ke
-          sepupu —{" "}
+          Rumah nenek ramai. Sandal memenuhi teras. Bau masakan dari dapur.
+          Foto-foto lama masih tergantung di dinding. —{" "}
           <em style={{ color: "rgba(242,235,217,0.75)", fontStyle: "italic" }}>
-            "itu siapa ya? kita manggil om, tapi om siapa?"
+            Kita tahu mereka keluarga.
           </em>
         </p>
 
         {/* Beat 2 */}
         <p className="ck-narrative-body reveal-up reveal-delay-3">
-          Di dinding, foto lama yang sudah memutih. Orang-orang yang{" "}
-          <strong>katanya masih keluarga</strong> — tapi kamu tak pernah
-          meraba <em>benang ikatan mereka</em>.
+          Ada nama yang mulai <strong>terlupa</strong>. Ada foto yang{" "}
+          <strong>tak lagi punya cerita.</strong> Ada hubungan yang{" "}
+          <strong>hanya diketahui oleh satu orang</strong>. Orang-orang yang{" "}
+          <strong>katanya masih keluarga</strong> — tapi kamu tak pernah tahu{" "}
+          <em>
+            <strong>benang ikatan yang terhubung ke mereka</strong>
+          </em>
+          .
         </p>
 
         {/* Beat 3 — emotional peak */}
@@ -66,12 +71,12 @@ export function NarrativeSection() {
           className="ck-narrative-body reveal-up reveal-delay-3"
           style={{ color: "rgba(242,235,217,0.82)", fontWeight: 400 }}
         >
-          Biasanya cuma <strong>seorang</strong> yang masih ingat segalanya
-          — nenek, kakek, atau tante tertua.
+          Biasanya cuma <strong>seorang</strong> yang masih ingat segalanya —
+          nenek, kakek, hingga buyut.
           <strong>
             {" "}
             Begitu beliau pergi, pertanyaan-pertanyaan itu{" "}
-            <em>pun menghilang bersama</em>.
+            <em>pun menghilang bersamanya</em>.
           </strong>
         </p>
 
@@ -105,9 +110,9 @@ export function NarrativeSection() {
             lineHeight: 1.5,
           }}
         >
-          Cerita Keluarga ada supaya cerita
+          Cerita Keluarga ada agar cerita
           <br />
-          tidak ikut pergi bersama beliau.
+          ini tetap berlanjut.
         </p>
       </div>
     </section>
