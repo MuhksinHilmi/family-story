@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Briefcase, Search, Send, UserPlus, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { FamilyTreeLoader } from "@/components/ui/family-tree-loader";
 
 interface FamilyMatch {
   nuclear_family_id: number;
@@ -129,12 +130,13 @@ export default function SkillDiscoveryPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <AnimatePresence mode="popLayout">
             {isLoading ? (
-              [...Array(4)].map((_, i) => (
-                <motion.div
-                  key={`skeleton-${i}`}
-                  className="h-40 bg-[#EDE4D3] animate-pulse rounded-2xl"
+              <div className="col-span-full flex justify-center py-8">
+                <FamilyTreeLoader
+                  fullscreen={false}
+                  size="sm"
+                  message="Mencari keluarga..."
                 />
-              ))
+              </div>
             ) : matches.length > 0 ? (
               matches.map((match) => (
                 <motion.div

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { OtpInput } from "@/components/ui/otp-input";
 import { rootStyles } from "@/components/ui/design-system";
+import { FamilyTreeLoader } from "@/components/ui/family-tree-loader";
 
 function LoginForm() {
   const router = useRouter();
@@ -204,10 +205,13 @@ export default function LoginPage() {
         <Suspense
           fallback={
             <Card className="w-full max-w-md lp-card">
-              <CardHeader className="card-header">
-                <CardTitle>Masuk</CardTitle>
-                <CardDescription>Memuat...</CardDescription>
-              </CardHeader>
+              <CardContent className="flex justify-center py-8">
+                <FamilyTreeLoader
+                  fullscreen={false}
+                  size="sm"
+                  message="Memuat..."
+                />
+              </CardContent>
             </Card>
           }
         >

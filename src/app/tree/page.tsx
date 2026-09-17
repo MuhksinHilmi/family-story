@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Share2 } from "lucide-react";
+import { FamilyTreeLoader } from "@/components/ui/family-tree-loader";
 import { FamilyNode } from "./components/FamilyNode";
 import { AddNodeModal } from "./components/AddNodeModal";
 import { NodeDetailModal } from "./components/NodeDetailModal";
@@ -638,14 +639,12 @@ function TreePageContent() {
       {/* Loading Overlay for "Undang User Baru" (Email Invite) */}
       {isSendingInvitation && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
-          <div className="bg-white rounded-2xl px-8 py-7 shadow-xl flex flex-col items-center gap-3 min-w-[260px]">
-            <div className="w-8 h-8 border-4 border-[#4A7C59] border-t-transparent rounded-full animate-spin" />
-            <p className="text-[#3B2F1E] font-medium text-base">
-              Mengirim undangan...
-            </p>
-            <p className="text-sm text-[#6B5F4D] text-center">
-              Mohon tunggu sebentar
-            </p>
+          <div className="bg-[#FDFAF5] border border-[#D4C4A8] rounded-3xl px-8 py-7 shadow-xl flex flex-col items-center gap-3 min-w-[260px]">
+            <FamilyTreeLoader
+              fullscreen={false}
+              size="sm"
+              message="Mengirim undangan..."
+            />
           </div>
         </div>
       )}
@@ -656,11 +655,7 @@ function TreePageContent() {
 export default function TreePage() {
   return (
     <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center text-gray-400">
-          Memuat pohon keluarga...
-        </div>
-      }
+      fallback={<FamilyTreeLoader message="Memuat pohon keluarga..." />}
     >
       <TreePageContent />
     </Suspense>

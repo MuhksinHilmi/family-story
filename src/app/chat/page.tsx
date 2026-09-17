@@ -12,6 +12,7 @@ import { ChatMessage, User } from "@/types";
 import { apiFetch } from "@/lib/api-client";
 import { useAuth } from "@/context/auth-context";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { FamilyTreeLoader } from "@/components/ui/family-tree-loader";
 
 // Local `messages` adalah sumber permanen. Supabase `messages` hanya transient (auto-delete >1 hari via pg_cron).
 
@@ -576,11 +577,11 @@ export default function ChatPage() {
             )}
 
             {loading ? (
-              <div className="flex-1 flex items-center justify-center">
-                <p className="text-sm text-[#9C8B75] animate-pulse">
-                  Memuat pesan...
-                </p>
-              </div>
+              <FamilyTreeLoader
+                fullscreen={false}
+                size="sm"
+                message="Memuat pesan..."
+              />
             ) : messages.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center gap-3">
                 <div className="h-14 w-14 rounded-full bg-[#D4C4A8] flex items-center justify-center">

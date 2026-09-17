@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Trophy, Upload, Image as ImageIcon, Send, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { FamilyTreeLoader } from "@/components/ui/family-tree-loader";
 
 interface Challenge {
   id: number;
@@ -82,7 +83,7 @@ export default function ChallengeTab({ halaqahId }: { halaqahId: string }) {
     }
   };
 
-  if (isLoading) return <div className="text-center py-10 text-[#9C8B75]">Memuat tantangan...</div>;
+  if (isLoading) return <FamilyTreeLoader fullscreen={false} size="sm" message="Memuat tantangan..." />;
 
   if (!data.challenge) {
     return (

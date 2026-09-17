@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users } from 'lucide-react';
+import { FamilyTreeLoader } from "@/components/ui/family-tree-loader";
 
 function RegisterForm() {
   const router = useRouter();
@@ -25,10 +26,12 @@ function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [invitationData, setInvitationData] = useState<any>(null);
   const [genderLocked, setGenderLocked] = useState(false);
+  const hasCheckedEmail = useRef(false);
 
   // Fetch invitation details if coming from invite link
   useEffect(() => {
-    if (inviteToken) {
+    if (inviteToken && !hasCheckedEmail.current) {
+      hasCheckedEmail.current = true;
       fetch(`/api/invitations?token=${inviteToken}`)
         .then(res => res.json())
         .then(data => {
@@ -46,13 +49,29 @@ function RegisterForm() {
               setFormData(prev => ({ ...prev, gender: forcedGender }));
               setGenderLocked(true);
             }
+
+            // Jika user sudah terdaftar via email ini, langsung ke halaman login
+            if (data.invitation.invitee_email) {
+              fetch('/api/auth/check-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: data.invitation.invitee_email })
+              })
+                .then(r => r.json())
+                .then(result => {
+                  if (result.registered) {
+                    router.push('/auth/login');
+                  }
+                })
+                .catch(() => {});
+            }
           }
         })
         .catch(() => {
           // ignore fetch error, user can still register normally
         });
     }
-  }, [inviteToken]);
+  }, [inviteToken, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +92,11 @@ function RegisterForm() {
       });
       const data = await response.json();
       if (response.ok) {
-        alert('Berhasil! Akun terdaftar. Cek email untuk link aktivasi.');
+        if (data.via_invitation) {
+          alert('Berhasil! Akun terdaftar dan undangan diklaim. Silakan login.');
+        } else {
+          alert('Berhasil! Akun terdaftar. Cek email untuk link aktivasi.');
+        }
         router.push('/auth/login');
       } else {
         alert('Gagal: ' + (data.error || 'Terjadi kesalahan'));
@@ -206,10 +229,13 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-[#F5F0E8]">
       <Suspense fallback={
         <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Daftar</CardTitle>
-            <CardDescription>Memuat...</CardDescription>
-          </CardHeader>
+          <CardContent className="flex justify-center py-8">
+            <FamilyTreeLoader
+              fullscreen={false}
+              size="sm"
+              message="Memuat..."
+            />
+          </CardContent>
         </Card>
       }>
         <RegisterForm />

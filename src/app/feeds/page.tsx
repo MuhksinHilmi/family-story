@@ -24,6 +24,7 @@ const FocusedFeedModal = nextDynamic(() => import("./FocusedFeedModal"), {
   ssr: false,
 });
 import { renderWithMentions } from "@/lib/mentions";
+import { FamilyTreeLoader } from "@/components/ui/family-tree-loader";
 
 interface Feed {
   id: string;
@@ -616,16 +617,11 @@ function FeedsPageContent() {
           )}
 
           {loading ? (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "3rem 0",
-                color: "var(--ck-dash-text3)",
-                fontSize: "0.875rem",
-              }}
-            >
-              Memuat momen keluarga...
-            </div>
+            <FamilyTreeLoader
+              fullscreen={false}
+              size="sm"
+              message="Memuat momen keluarga..."
+            />
           ) : feeds.length === 0 ? (
             /* Empty state */
             <div className="ck-feed-empty">

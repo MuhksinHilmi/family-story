@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Validasi gender untuk spouse (harus berbeda dengan pengundang)
+    // Validasi gender untuk spouse (harus berbeda dengan pengundang)
       if (invitation.relationship_type === 'spouse' && invitation.inviter_gender) {
         const expectedGender = invitation.inviter_gender === 'male' ? 'female' : 'male';
 
@@ -95,15 +95,22 @@ export async function POST(request: NextRequest) {
     const activationToken = randomBytes(32).toString('hex');
     const userUuid = randomUUID();
 
+    // Untuk user yang didaftarkan melalui undangan, otomatis-verifikasi email
+    // karena identitas mereka sudah diverifikasi melalui undangan yang ditandatangani oleh orang tua/pasangan.
+    const isEmailVerified = !!invitation;
+    const activationStatus = isEmailVerified ? 'active' : 'pending';
+    // Hanya set activation_token untuk user yang bukan dari undangan
+    const activationTokenOrNUll = isEmailVerified ? null : activationToken;
+
     // 1. Buat user
     const userResult = await client.query(
       `INSERT INTO users 
-        (uuid, full_name, email, phone, gender, birth_date, 
-         is_email_verified, is_phone_verified, activation_token, activation_status, 
-         created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, false, false, $7, 'pending', NOW(), NOW())
-       RETURNING id, uuid, full_name, email, gender, birth_date`,
-      [userUuid, full_name, email, phone, gender, birth_date, activationToken]
+         (uuid, full_name, email, phone, gender, birth_date, 
+          is_email_verified, is_phone_verified, activation_token, activation_status, 
+          created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, $9, NOW(), NOW())
+        RETURNING id, uuid, full_name, email, gender, birth_date`,
+      [userUuid, full_name, email, phone, gender, birth_date, isEmailVerified, activationTokenOrNUll, activationStatus]
     );
 
     const user = userResult.rows[0];
@@ -363,23 +370,27 @@ export async function POST(request: NextRequest) {
 
     await client.query('COMMIT');
 
-    // 3. Kirim link aktivasi email
-    await sendActivationLink(email, activationToken);
+    // 3. Kirim link aktivasi email — HANYA untuk user yang tidak mendaftar lewat undangan.
+    //    User yang daftar via undangan sudah diverifikasi otomatis.
+    if (!invitation) {
+      await sendActivationLink(email, activationToken);
+    }
 
     const isViaInvitation = !!invitation;
 
     return NextResponse.json(
       {
         message: isViaInvitation
-          ? 'Akun berhasil dibuat dan undangan telah diklaim. Silakan cek email untuk aktivasi.'
+          ? 'Akun berhasil dibuat dan undangan telah diklaim. Silakan login.'
           : 'Akun berhasil dibuat. Silakan cek email untuk aktivasi.',
-        user: {
+         user: {
           id: user.id,
           uuid: user.uuid,
           full_name: user.full_name,
           email: user.email,
         },
-        via_invitation: isViaInvitation
+        via_invitation: isViaInvitation,
+        is_email_verified: isEmailVerified
       },
       { status: 201 }
     );
